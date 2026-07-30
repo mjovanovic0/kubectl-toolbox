@@ -174,9 +174,10 @@ func (r *Resolver) describeVMSnapshotContent(ctx context.Context, content *unstr
 	}
 
 	seen := map[string]bool{}
+	takenAt := nstr(content.Object, "status", "creationTime")
 	for _, raw := range backups {
 		vb := asMap(raw)
-		r.describeVolumeBackup(ctx, ns, vb, node, vsStatus, seen)
+		r.describeVolumeBackup(ctx, ns, vb, node, vsStatus, seen, takenAt)
 	}
 
 	// Any status entry with no matching backup is an inconsistency worth showing.
@@ -200,6 +201,7 @@ func (r *Resolver) describeVolumeBackup(
 	parent *tree.Node,
 	vsStatus map[string]map[string]interface{},
 	seen map[string]bool,
+	takenAt string,
 ) {
 	diskName := nstr(vb, "volumeName")
 	node := parent.Add(tree.New("volumeBackup[" + diskName + "]"))
@@ -215,11 +217,21 @@ func (r *Resolver) describeVolumeBackup(
 
 	// Is the original PVC still around? Decisive when debugging a failed restore.
 	if pvcName != "" {
-		if _, err := r.src.Get(ctx, source.Ref{Kind: "PersistentVolumeClaim", Namespace: ns, Name: pvcName}); err != nil {
+		pvc, err := r.src.Get(ctx, source.Ref{Kind: "PersistentVolumeClaim", Namespace: ns, Name: pvcName})
+		switch {
+		case err != nil:
 			node.Note("source PVC " + pvcName + " no longer exists (captured spec above is the only record)")
 			node.Note("this snapshot is now the only copy of that disk -- deleting it discards the array snapshot too")
-		} else {
-			node.Note("source PVC " + pvcName + " still exists")
+		case takenAt != "" && createdAt(pvc) > takenAt:
+			// A name is not an identity. An InPlace restore deletes the original PVC
+			// and recreates it under the same name, so a PVC newer than the snapshot
+			// cannot be the object that was captured.
+			node.Note(fmt.Sprintf("a PVC named %s exists but was created at %s, AFTER this snapshot was taken at %s: "+
+				"it is a different volume that reuses the name, so the disk that was snapshotted is gone",
+				pvcName, createdAt(pvc), takenAt))
+			node.Note("this snapshot is the only copy of the original disk -- deleting it discards the array snapshot too")
+		default:
+			node.Note("source PVC " + pvcName + " still exists (created " + orDash(createdAt(pvc)) + ")")
 		}
 	}
 
