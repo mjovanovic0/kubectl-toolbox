@@ -1,0 +1,12 @@
+# Built binary and release artifacts
+/kubectl-vmsnap
+/kubectl-vmsnap.exe
+/dist/
+
+# macOS
+.DS_Store
+
+# Editor/IDE
+*.swp
+.idea/
+.vscode/
