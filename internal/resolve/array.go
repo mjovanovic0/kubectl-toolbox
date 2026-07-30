@@ -231,7 +231,15 @@ func (r *Resolver) checkSnapshotParentVolume(ctx context.Context, snap *unstruct
 	snapName := fieldStr(snap.Object, "spec", "snapshotName")
 	idx := strings.LastIndex(snapName, ".")
 	if idx <= 0 {
-		return // not the "<volume>.<suffix>" form; nothing to infer
+		// Not the "<volume>.<suffix>" form. Drivers differ here: one Portworx
+		// version names snapshots after their parent volume, another uses a flat
+		// "px_<cluster>-snapshot-<uuid>". Saying nothing would read as "checked and
+		// fine", so state that this method does not apply and point at the check
+		// that does.
+		node.Note("cannot infer a parent volume from snapshotName " + truncate(snapName, 60) +
+			": this driver does not encode one, so parent-death cannot be judged from the name -- " +
+			"the origin volume lookup on the VolumeSnapshotContent above is the check that applies here")
+		return
 	}
 	parent := snapName[:idx]
 
