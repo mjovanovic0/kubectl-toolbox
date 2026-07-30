@@ -22,7 +22,8 @@ install -m 0755 kubectl-vmsnap ~/bin/                # any directory on your PAT
 oc vmsnap vm <vm-name> -n <namespace>
 ```
 
-Or build from source:
+Or build from source (needs Go 1.26 or newer, which the Kubernetes client
+libraries require):
 
 ```sh
 go install github.com/mjovanovic0/kubectl-vmsnap@latest

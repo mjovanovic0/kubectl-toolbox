@@ -71,6 +71,10 @@ so a tag on a broken tree fails instead of shipping.
 
 ## Development
 
+Go 1.26 or newer, as required by the Kubernetes client libraries; the `go`
+directive in `go.mod` is the source of truth and CI reads it via
+`setup-go`'s `go-version-file`.
+
 ```sh
 make test     # runs entirely against testdata fixtures; no cluster needed
 make vet

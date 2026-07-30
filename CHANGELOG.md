@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Upgraded the Kubernetes client libraries to 0.36.3, `spf13/cobra` to 1.10.2 and
+  `sigs.k8s.io/yaml` to 1.6.0. The Kubernetes libraries require Go 1.26, so the
+  `go` directive moved from 1.24 to 1.26.0 and building from source now needs that
+  toolchain. No API changes were needed and behaviour is unchanged.
+- CI now uses `actions/checkout@v7` and `actions/setup-go@v7`.
+
 ## [0.0.1] - 2026-07-30
 
 First public release. Resolves KubeVirt / OpenShift Virtualization snapshot and
