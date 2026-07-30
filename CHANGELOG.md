@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING:** renamed from `vmsnap` to `vmstorage`. The command is now
+  `oc vmstorage vm <name>`, the binary is `kubectl-vmstorage`, and the module path
+  is `github.com/mjovanovic0/kubectl-vmstorage`. The old name described only the
+  snapshot half of the tool, while most of it resolves the disk chain, and it read
+  as though the tool took snapshots rather than inspected them. Anyone who
+  installed `v0.0.1` should remove `kubectl-vmsnap` from their PATH; subcommands,
+  flags and exit codes are otherwise unchanged.
+
 ### Fixed
 
 - The array-side parent-volume check silently did nothing when a Portworx snapshot
@@ -77,5 +87,5 @@ missing snapshots.
 - `make text` packages the binary as a self-extracting, checksum-verified shell
   script for hosts reachable only by pasting text into a terminal.
 
-[Unreleased]: https://github.com/mjovanovic0/kubectl-vmsnap/compare/v0.0.1...HEAD
-[0.0.1]: https://github.com/mjovanovic0/kubectl-vmsnap/releases/tag/v0.0.1
+[Unreleased]: https://github.com/mjovanovic0/kubectl-vmstorage/compare/v0.0.1...HEAD
+[0.0.1]: https://github.com/mjovanovic0/kubectl-vmstorage/releases/tag/v0.0.1

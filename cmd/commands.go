@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/mjovanovic0/kubectl-vmsnap/internal/resolve"
+	"github.com/mjovanovic0/kubectl-vmstorage/internal/resolve"
 )
 
 func newVMCommand(g *globals) *cobra.Command {

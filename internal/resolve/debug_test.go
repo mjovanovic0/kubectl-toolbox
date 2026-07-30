@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mjovanovic0/kubectl-vmsnap/internal/source"
-	"github.com/mjovanovic0/kubectl-vmsnap/internal/tree"
+	"github.com/mjovanovic0/kubectl-vmstorage/internal/source"
+	"github.com/mjovanovic0/kubectl-vmstorage/internal/tree"
 )
 
 func dumpResolver(t *testing.T, dir, ns string, opt Options) *Resolver {

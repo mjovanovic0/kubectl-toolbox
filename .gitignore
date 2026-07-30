@@ -1,6 +1,6 @@
 # Built binary and release artifacts
-/kubectl-vmsnap
-/kubectl-vmsnap.exe
+/kubectl-vmstorage
+/kubectl-vmstorage.exe
 /dist/
 
 # macOS

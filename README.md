@@ -1,7 +1,7 @@
-# kubectl-vmsnap
+# kubectl-vmstorage
 
-[![CI](https://github.com/mjovanovic0/kubectl-vmsnap/actions/workflows/ci.yml/badge.svg)](https://github.com/mjovanovic0/kubectl-vmsnap/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/mjovanovic0/kubectl-vmsnap?sort=semver)](https://github.com/mjovanovic0/kubectl-vmsnap/releases/latest)
+[![CI](https://github.com/mjovanovic0/kubectl-vmstorage/actions/workflows/ci.yml/badge.svg)](https://github.com/mjovanovic0/kubectl-vmstorage/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/mjovanovic0/kubectl-vmstorage?sort=semver)](https://github.com/mjovanovic0/kubectl-vmstorage/releases/latest)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
 Resolve the full reference chain behind a KubeVirt / OpenShift Virtualization VM's
@@ -14,36 +14,36 @@ usually breaks, and the process exits non-zero.
 ## Quick start
 
 Download the archive for your platform from the
-[latest release](https://github.com/mjovanovic0/kubectl-vmsnap/releases/latest):
+[latest release](https://github.com/mjovanovic0/kubectl-vmstorage/releases/latest):
 
 ```sh
-tar -xzf kubectl-vmsnap_v0.0.1_linux_amd64.tar.gz    # or a darwin/windows asset
-install -m 0755 kubectl-vmsnap ~/bin/                # any directory on your PATH
-oc vmsnap vm <vm-name> -n <namespace>
+tar -xzf kubectl-vmstorage_v0.0.1_linux_amd64.tar.gz    # or a darwin/windows asset
+install -m 0755 kubectl-vmstorage ~/bin/                # any directory on your PATH
+oc vmstorage vm <vm-name> -n <namespace>
 ```
 
 Or build from source (needs Go 1.26 or newer, which the Kubernetes client
 libraries require):
 
 ```sh
-go install github.com/mjovanovic0/kubectl-vmsnap@latest
+go install github.com/mjovanovic0/kubectl-vmstorage@latest
 # or, from a clone:
 make install PREFIX=~/bin
 ```
 
 Verify a download against `checksums.txt` from the same release.
 
-`oc vmsnap vm <vm-name>` is the main entry point: it walks the VM's disks down to
+`oc vmstorage vm <vm-name>` is the main entry point: it walks the VM's disks down to
 their PVCs/PVs and the array, then resolves every snapshot of that VM down to the
 array, and merges all findings into one problem list.
 
 The plugin is discovered by both `oc` and `kubectl` from the single
-`kubectl-vmsnap` binary — `oc` looks for `kubectl-*` as well as `oc-*`, so
-`oc vmsnap ...`, `kubectl vmsnap ...` and `kubectl-vmsnap ...` are equivalent.
+`kubectl-vmstorage` binary — `oc` looks for `kubectl-*` as well as `oc-*`, so
+`oc vmstorage ...`, `kubectl vmstorage ...` and `kubectl-vmstorage ...` are equivalent.
 
 ## The two chains
 
-Snapshot chain — `kubectl vmsnap snapshot <vm> <snapshot>`:
+Snapshot chain — `kubectl vmstorage snapshot <vm> <snapshot>`:
 
 | Object | Reference followed |
 | --- | --- |
@@ -54,7 +54,7 @@ Snapshot chain — `kubectl vmsnap snapshot <vm> <snapshot>`:
 | `VolumeSnapshotContent` | `status.snapshotHandle` |
 | `PureSnapshot` | matched on the CSI handle |
 
-Disk chain — `kubectl vmsnap disks <vm>`:
+Disk chain — `kubectl vmstorage disks <vm>`:
 
 | Object | Reference followed |
 | --- | --- |
@@ -73,7 +73,7 @@ and a restored `PersistentVolumeClaim` records its origin snapshot in
 
 ```sh
 make install PREFIX=~/bin      # anywhere on PATH
-oc plugin list                 # should show kubectl-vmsnap
+oc plugin list                 # should show kubectl-vmstorage
 ```
 
 Cross-compile release binaries with `make cross`.
@@ -85,7 +85,7 @@ binary, gzipped and base64-encoded, with its sha256 embedded — for hosts reach
 only by copying text into a terminal.
 
 ```sh
-make text                     # -> dist/kubectl-vmsnap-linux-amd64.sh  (~16 MiB of text)
+make text                     # -> dist/kubectl-vmstorage-linux-amd64.sh  (~16 MiB of text)
 make text TEXT_ARCH=arm64
 make text COMP=xz             # ~33% less text, needs unxz on the host
 make text CHUNK=4             # also split the payload into 4 MiB .b64 parts
@@ -95,9 +95,9 @@ make text-all                 # linux amd64 + arm64
 Then on the host:
 
 ```sh
-sh kubectl-vmsnap-linux-amd64.sh          # writes ./kubectl-vmsnap, verifies sha256
-install -m 0755 kubectl-vmsnap ~/bin/
-oc vmsnap vm <name> -n <namespace>
+sh kubectl-vmstorage-linux-amd64.sh          # writes ./kubectl-vmstorage, verifies sha256
+install -m 0755 kubectl-vmstorage ~/bin/
+oc vmstorage vm <name> -n <namespace>
 ```
 
 The script decodes to a staging path and only moves the binary into place after
@@ -105,30 +105,30 @@ the checksum matches, so a truncated or mangled paste fails loudly and leaves
 nothing runnable behind. `make text` verifies its own round-trip before reporting
 success. If the paste is too large for one go, `CHUNK=<MiB>` also emits numbered
 parts to reassemble with
-`cat *.part-* | base64 -d | gunzip > kubectl-vmsnap`.
+`cat *.part-* | base64 -d | gunzip > kubectl-vmstorage`.
 
 ## Usage
 
 ```sh
 # everything about one VM: disks and all its snapshots
-oc vmsnap vm win-db-01 -n virt-prod
+oc vmstorage vm win-db-01 -n virt-prod
 
 # a VM with a long snapshot history: only the newest few
-oc vmsnap vm win-db-01 -n virt-prod --latest 3
-oc vmsnap vm win-db-01 -n virt-prod --no-snapshots   # disks only
-oc vmsnap vm win-db-01 -n virt-prod --no-disks       # snapshots only
+oc vmstorage vm win-db-01 -n virt-prod --latest 3
+oc vmstorage vm win-db-01 -n virt-prod --no-snapshots   # disks only
+oc vmstorage vm win-db-01 -n virt-prod --no-disks       # snapshots only
 
 # what snapshots exist, and which ones are already suspect
-kubectl vmsnap list -n virt-prod
-kubectl vmsnap list win-db-01 -n virt-prod
+kubectl vmstorage list -n virt-prod
+kubectl vmstorage list win-db-01 -n virt-prod
 
 # narrow to one snapshot, or to the disks only
-kubectl vmsnap snapshot win-db-01 snap-2026-07-20 -n virt-prod
-kubectl vmsnap disks win-db-01 -n virt-prod
+kubectl vmstorage snapshot win-db-01 snap-2026-07-20 -n virt-prod
+kubectl vmstorage disks win-db-01 -n virt-prod
 
 # start from a name you found in CSI or storage-operator logs
-kubectl vmsnap volumesnapshot vmsnapshot-8f3a-vol-rootdisk -n virt-prod
-kubectl vmsnap pvc win-db-01-root -n virt-prod
+kubectl vmstorage volumesnapshot vmsnapshot-8f3a-vol-rootdisk -n virt-prod
+kubectl vmstorage pvc win-db-01-root -n virt-prod
 ```
 
 Standard `kubectl` flags (`-n`, `--context`, `--kubeconfig`) all apply.
@@ -149,7 +149,7 @@ access:
 
 ```sh
 oc adm must-gather --image=registry.redhat.io/container-native-virtualization/cnv-must-gather-rhel9
-kubectl vmsnap snapshot win-db-01 snap-2026-07-20 --dump ./must-gather.local.123 -n virt-prod
+kubectl vmstorage snapshot win-db-01 snap-2026-07-20 --dump ./must-gather.local.123 -n virt-prod
 ```
 
 A hand-rolled capture works too — `kind: List` wrappers and multi-document files
@@ -159,7 +159,7 @@ are both unwrapped:
 mkdir dump && cd dump
 for k in vm vmsnapshot vmsnapshotcontent volumesnapshot dv pvc; do oc get $k -o yaml > $k.yaml; done
 oc get volumesnapshotcontent,pv,puresnapshot,purevolume -o yaml > cluster.yaml
-kubectl vmsnap snapshot win-db-01 snap-2026-07-20 --dump ./dump -n virt-prod
+kubectl vmstorage snapshot win-db-01 snap-2026-07-20 --dump ./dump -n virt-prod
 ```
 
 ## Exit codes
@@ -180,9 +180,9 @@ resolved from the Kind through API discovery rather than hardcoded — which als
 means other vendors' CRs work by passing a different kind:
 
 ```sh
-kubectl vmsnap snapshot vm snap --array-snapshot-kind MyVendorSnapshot
-kubectl vmsnap disks vm --array-volume-kind MyVendorVolume
-kubectl vmsnap snapshot vm snap --no-array   # stop at the CSI handle
+kubectl vmstorage snapshot vm snap --array-snapshot-kind MyVendorSnapshot
+kubectl vmstorage disks vm --array-volume-kind MyVendorVolume
+kubectl vmstorage snapshot vm snap --no-array   # stop at the CSI handle
 ```
 
 Because the handle-to-CR mapping is not specified by CSI, the object is located
@@ -288,6 +288,6 @@ tag. Notable changes are recorded in [CHANGELOG.md](CHANGELOG.md).
 
 [Apache-2.0](LICENSE). Copyright 2026 Milan Jovanović.
 
-`kubectl-vmsnap` is an independent tool. It is not affiliated with or endorsed by
+`kubectl-vmstorage` is an independent tool. It is not affiliated with or endorsed by
 Red Hat, the KubeVirt project, Pure Storage or Portworx; those names are used only
 to describe the APIs and resources it reads.

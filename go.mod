@@ -1,4 +1,4 @@
-module github.com/mjovanovic0/kubectl-vmsnap
+module github.com/mjovanovic0/kubectl-vmstorage
 
 go 1.26.0
 

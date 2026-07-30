@@ -8,9 +8,9 @@ import (
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 
-	"github.com/mjovanovic0/kubectl-vmsnap/internal/resolve"
-	"github.com/mjovanovic0/kubectl-vmsnap/internal/source"
-	"github.com/mjovanovic0/kubectl-vmsnap/internal/tree"
+	"github.com/mjovanovic0/kubectl-vmstorage/internal/resolve"
+	"github.com/mjovanovic0/kubectl-vmstorage/internal/source"
+	"github.com/mjovanovic0/kubectl-vmstorage/internal/tree"
 )
 
 // Version is overridden at build time with -ldflags.
@@ -102,17 +102,17 @@ func (g *globals) emit(r *tree.Report) error {
 func NewRootCommand() (*cobra.Command, *globals) {
 	g := &globals{configFlags: genericclioptions.NewConfigFlags(true)}
 
-	// Use is the binary name rather than "kubectl vmsnap": cobra derives every
+	// Use is the binary name rather than "kubectl vmstorage": cobra derives every
 	// subcommand's usage line from the first word of Use, so a two-word Use would
 	// render all of them as "kubectl <sub>".
 	root := &cobra.Command{
-		Use:   "kubectl-vmsnap",
+		Use:   "kubectl-vmstorage",
 		Short: "Resolve KubeVirt VM snapshot and disk chains down to the storage array",
 		Long: `Resolve the full reference chain behind an OpenShift Virtualization VM's
 snapshots and disks, so you can find the object to inspect on the storage array.
 
-Runs either as a kubectl plugin ("kubectl vmsnap ...") or directly
-("kubectl-vmsnap ...").
+Runs either as a kubectl plugin ("kubectl vmstorage ...") or directly
+("kubectl-vmstorage ...").
 
 Snapshot chain:
   VirtualMachine -> VirtualMachineSnapshot -> VirtualMachineSnapshotContent

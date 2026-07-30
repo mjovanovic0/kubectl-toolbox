@@ -8,7 +8,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
-	"github.com/mjovanovic0/kubectl-vmsnap/internal/tree"
+	"github.com/mjovanovic0/kubectl-vmstorage/internal/tree"
 )
 
 // maxEventsPerObject bounds how many events one node reports. The newest few

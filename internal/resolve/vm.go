@@ -7,8 +7,8 @@ import (
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
-	"github.com/mjovanovic0/kubectl-vmsnap/internal/source"
-	"github.com/mjovanovic0/kubectl-vmsnap/internal/tree"
+	"github.com/mjovanovic0/kubectl-vmstorage/internal/source"
+	"github.com/mjovanovic0/kubectl-vmstorage/internal/tree"
 )
 
 // VMOptions control the combined per-VM view.

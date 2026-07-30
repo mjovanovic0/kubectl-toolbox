@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mjovanovic0/kubectl-vmsnap/internal/source"
-	"github.com/mjovanovic0/kubectl-vmsnap/internal/tree"
+	"github.com/mjovanovic0/kubectl-vmstorage/internal/source"
+	"github.com/mjovanovic0/kubectl-vmstorage/internal/tree"
 )
 
 // SnapshotRow is one line of the list output.

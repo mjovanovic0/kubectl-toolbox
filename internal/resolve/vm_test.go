@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mjovanovic0/kubectl-vmsnap/internal/tree"
+	"github.com/mjovanovic0/kubectl-vmstorage/internal/tree"
 )
 
 func TestVMCombinesDisksAndSnapshots(t *testing.T) {
