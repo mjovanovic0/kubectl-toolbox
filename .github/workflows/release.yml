@@ -1,0 +1,142 @@
+name: Release
+
+on:
+  push:
+    tags:
+      # Semver tags only: v1.2.3, v1.2.3-rc.1
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'
+
+permissions:
+  contents: write # required to create the release and upload assets
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so `git describe` and the changelog range work.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Gate the release on the test suite
+        run: |
+          gofmt -l . | tee /tmp/unformatted
+          test ! -s /tmp/unformatted
+          go vet ./...
+          go test -count=1 ./...
+
+      - name: Build all targets
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          module=github.com/mjovanovic0/kubectl-vmsnap
+          mkdir -p dist
+          distdir="$(cd dist && pwd)"
+
+          # kubectl and oc both discover a plugin named kubectl-<name> on PATH, so
+          # the binary inside every archive keeps that exact name.
+          for target in \
+            linux/amd64 linux/arm64 \
+            darwin/amd64 darwin/arm64 \
+            windows/amd64 windows/arm64
+          do
+            goos="${target%/*}"; goarch="${target#*/}"
+            name="kubectl-vmsnap"
+            [ "$goos" = "windows" ] && name="kubectl-vmsnap.exe"
+
+            workdir="$(mktemp -d)"
+            echo "building $goos/$goarch"
+            GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 go build \
+              -trimpath \
+              -ldflags "-s -w -X ${module}/cmd.Version=${VERSION}" \
+              -o "$workdir/$name" .
+
+            # Ship the licence and README alongside the binary.
+            cp LICENSE NOTICE README.md "$workdir/"
+
+            base="kubectl-vmsnap_${VERSION}_${goos}_${goarch}"
+            if [ "$goos" = "windows" ]; then
+              (cd "$workdir" && zip -q -r "${distdir}/${base}.zip" .)
+            else
+              tar -czf "dist/${base}.tar.gz" -C "$workdir" .
+            fi
+            rm -rf "$workdir"
+          done
+
+      - name: Build the self-extracting text installer
+        env:
+          VERSION: ${{ github.ref_name }}
+        # For hosts reachable only by pasting text into a terminal, which is how
+        # some clusters are administered.
+        run: TEXT_OS=linux TEXT_ARCH=amd64 ./hack/textpack.sh
+
+      - name: Checksums
+        run: |
+          cd dist
+          # Only the distributable artifacts; the loose binaries textpack leaves
+          # behind are already inside the archives.
+          sha256sum *.tar.gz *.zip *.sh > checksums.txt
+          cat checksums.txt
+
+      - name: Release notes
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## kubectl-vmsnap ${VERSION}"
+            echo
+            echo "Resolve KubeVirt / OpenShift Virtualization snapshot and disk reference"
+            echo "chains down to storage-array objects."
+            echo
+            echo "### Install"
+            echo
+            echo '```sh'
+            echo "# macOS / Linux -- pick the archive for your platform, then:"
+            echo "tar -xzf kubectl-vmsnap_${VERSION}_linux_amd64.tar.gz"
+            echo "install -m 0755 kubectl-vmsnap ~/bin/"
+            echo "oc vmsnap vm <vm-name> -n <namespace>"
+            echo '```'
+            echo
+            echo "Both \`oc\` and \`kubectl\` discover the plugin from the single"
+            echo "\`kubectl-vmsnap\` binary on PATH."
+            echo
+            echo "For a host you can only paste text into, use"
+            echo "\`kubectl-vmsnap-linux-amd64.sh\`: it is the binary gzipped and"
+            echo "base64-encoded, self-extracting and checksum-verified."
+            echo
+            echo "Verify downloads against \`checksums.txt\`."
+
+            # Include the commit log since the previous tag, if there is one.
+            previous="$(git describe --tags --abbrev=0 "${VERSION}^" 2>/dev/null || true)"
+            if [ -n "$previous" ]; then
+              echo
+              echo "### Changes since ${previous}"
+              echo
+              git log --no-merges --pretty='- %s' "${previous}..${VERSION}"
+            fi
+          } > dist/release-notes.md
+          cat dist/release-notes.md
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ github.ref_name }}
+        # gh is preinstalled on GitHub runners, so no third-party action is needed
+        # in the path that publishes artifacts.
+        run: |
+          prerelease=""
+          case "$VERSION" in *-*) prerelease="--prerelease" ;; esac
+          gh release create "$VERSION" \
+            --title "$VERSION" \
+            --notes-file dist/release-notes.md \
+            $prerelease \
+            dist/*.tar.gz dist/*.zip dist/*.sh dist/checksums.txt
