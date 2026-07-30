@@ -1,0 +1,66 @@
+# A restore that is incomplete but has not (yet) raised a Failure condition.
+# Covers the branch where the tool must fall back to the generic
+# "has not completed" warning instead of quoting a Failure message.
+---
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: pending-vm
+  namespace: virt-prod
+spec:
+  running: true
+status:
+  printableStatus: Running
+---
+apiVersion: snapshot.kubevirt.io/v1beta1
+kind: VirtualMachineSnapshot
+metadata:
+  name: pending-snap
+  namespace: virt-prod
+spec:
+  source:
+    kind: VirtualMachine
+    name: pending-vm
+status:
+  phase: Succeeded
+  readyToUse: true
+  virtualMachineSnapshotContentName: pending-content
+---
+apiVersion: snapshot.kubevirt.io/v1beta1
+kind: VirtualMachineSnapshotContent
+metadata:
+  name: pending-content
+  namespace: virt-prod
+spec:
+  virtualMachineSnapshotName: pending-snap
+  volumeBackups: []
+status:
+  readyToUse: true
+---
+apiVersion: snapshot.kubevirt.io/v1beta1
+kind: VirtualMachineRestore
+metadata:
+  name: restore-pending
+  namespace: virt-prod
+  creationTimestamp: "2026-07-29T09:00:00Z"
+spec:
+  target:
+    apiGroup: kubevirt.io
+    kind: VirtualMachine
+    name: pending-vm
+  virtualMachineSnapshotName: pending-snap
+status:
+  complete: false
+  restores:
+    - volumeName: rootdisk
+      persistentVolumeClaim: restore-pending-rootdisk
+      volumeSnapshotName: vs-pending-rootdisk
+  conditions:
+    - type: Progressing
+      status: "True"
+      reason: Reconciling
+      message: Waiting for target to be ready
+    - type: Ready
+      status: "False"
+      reason: Reconciling
+      message: Waiting for target to be ready
