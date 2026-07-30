@@ -372,3 +372,90 @@ func TestProblemsAreDeduplicated(t *testing.T) {
 		}
 	}
 }
+
+// Portworx snapshot names come in two forms. When the name carries no parent
+// volume the check cannot judge parent-death, and it must say so: silence would
+// read as "checked and fine".
+func TestParentVolumeCheckSaysWhenItCannotJudge(t *testing.T) {
+	r := dumpResolver(t, "../../testdata/inplacerestore", "playground", Options{})
+	ls := lines(r.VM(context.Background(), "vm-snapshot-test", VMOptions{}))
+
+	l := findLine(t, ls, "PureSnapshot/5145aa09")
+	if !strings.Contains(l, "cannot infer a parent volume") {
+		t.Errorf("must state that the name carries no parent; got: %s", l)
+	}
+	if !strings.Contains(l, "origin volume lookup") {
+		t.Errorf("should redirect to the check that does apply; got: %s", l)
+	}
+	// And it must not claim the parent is missing, which it cannot know here.
+	for _, p := range r.rep.Problems {
+		if strings.Contains(p.Message, "no longer exists on the array") {
+			t.Errorf("must not assert a missing parent from an unparseable name: %+v", p)
+		}
+	}
+}
+
+// A CDI populator is indirection, not a different origin: VolumeCloneSource wraps
+// the very PVC the DataVolume declares, so the "sources disagree" note must not
+// fire on the wrapper's name.
+func TestPopulatorIsResolvedAndNotReportedAsADisagreement(t *testing.T) {
+	r := dumpResolver(t, "../../testdata/populator", "playground", Options{})
+	ls := lines(r.VM(context.Background(), "vm-snapshot-test", VMOptions{}))
+
+	l := findLine(t, ls, "spec.dataSourceRef VolumeCloneSource/volume-clone-source-923d03bf")
+	if !strings.Contains(l, "populator wrapping PersistentVolumeClaim/fedora-1217dcc8c58d") {
+		t.Errorf("the populator must resolve to the PVC it wraps; got: %s", l)
+	}
+	if strings.Contains(l, "separately declares its source as") {
+		t.Errorf("sources agree once the populator is resolved, so no disagreement note: %s", l)
+	}
+}
+
+// The disagreement note must still fire when the sources genuinely differ, which
+// is the case after a restore repopulates the volume from a snapshot.
+func TestGenuineSourceDisagreementStillReported(t *testing.T) {
+	r := dumpResolver(t, "../../testdata/inplacerestore", "playground", Options{})
+	ls := lines(r.VM(context.Background(), "vm-snapshot-test", VMOptions{}))
+	l := findLine(t, ls, "spec.dataSourceRef VolumeSnapshot/vmsnapshot-b7fee618")
+	if !strings.Contains(l, "separately declares its source as") {
+		t.Errorf("a real disagreement must still be reported; got: %s", l)
+	}
+}
+
+// A name is not an identity: an InPlace restore recreates the PVC under the same
+// name, so a PVC newer than the snapshot is not the object that was captured.
+func TestReusedPVCNameIsNotMistakenForTheCapturedDisk(t *testing.T) {
+	after := dumpResolver(t, "../../testdata/inplacerestore", "playground", Options{})
+	ls := lines(after.VM(context.Background(), "vm-snapshot-test", VMOptions{}))
+	l := findLine(t, ls, "volumeBackup[rootdisk]")
+	if !strings.Contains(l, "AFTER this snapshot was taken") {
+		t.Errorf("a newer same-named PVC must be called out; got: %s", l)
+	}
+	if !strings.Contains(l, "only copy of the original disk") {
+		t.Errorf("the consequence must be stated; got: %s", l)
+	}
+	if strings.Contains(l, "still exists (created") {
+		t.Errorf("must not claim the captured PVC survives; got: %s", l)
+	}
+
+	// The pre-restore state has the genuine PVC and must read as intact.
+	before := dumpResolver(t, "../../testdata/populator", "playground", Options{})
+	bl := lines(before.VM(context.Background(), "vm-snapshot-test", VMOptions{}))
+	b := findLine(t, bl, "volumeBackup[rootdisk]")
+	if !strings.Contains(b, "still exists (created") {
+		t.Errorf("the original PVC predates the snapshot and should read as intact; got: %s", b)
+	}
+	if strings.Contains(b, "AFTER this snapshot") {
+		t.Errorf("false positive on a genuinely surviving PVC: %s", b)
+	}
+}
+
+// The restore policy that explains the reused name must be visible.
+func TestVolumeRestorePolicyIsShown(t *testing.T) {
+	r := dumpResolver(t, "../../testdata/inplacerestore", "playground", Options{})
+	ls := lines(r.VM(context.Background(), "vm-snapshot-test", VMOptions{}))
+	l := findLine(t, ls, "VirtualMachineRestore/restore-vm-snapshot-test")
+	if !strings.Contains(l, "volumeRestorePolicy=InPlace") {
+		t.Errorf("InPlace is why the PVC name was reused and must be shown; got: %s", l)
+	}
+}

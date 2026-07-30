@@ -1,0 +1,251 @@
+# A healthy snapshot + InPlace restore cycle on a Portworx cluster whose snapshot
+# names carry NO parent volume ("px_<cluster>-snapshot-<uuid>"), unlike the
+# "<volume>.<suffix>" form. Pins three things:
+#   - the parent-volume check must say it cannot judge, not stay silent
+#   - a CDI VolumeCloneSource populator must resolve to the PVC it wraps, so the
+#     "sources disagree" note does not fire on a wrapper
+#   - after an InPlace restore the PVC name is reused by a NEWER object, which must
+#     not be reported as "the source PVC still exists"
+---
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: vm-snapshot-test
+  namespace: playground
+spec:
+  runStrategy: RerunOnFailure
+  template:
+    spec:
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: vm-snapshot-test
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userDataBase64: I2Nsb3VkLWNvbmZpZwo=
+status:
+  printableStatus: Stopped
+---
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataVolume
+metadata:
+  name: vm-snapshot-test
+  namespace: playground
+spec:
+  source:
+    pvc:
+      name: fedora-1217dcc8c58d
+      namespace: openshift-virtualization-os-images
+status:
+  claimName: vm-snapshot-test
+  phase: Succeeded
+  progress: 100.0%
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fedora-1217dcc8c58d
+  namespace: openshift-virtualization-os-images
+spec:
+  storageClassName: deerls6pst303v4
+  volumeMode: Block
+status:
+  phase: Bound
+  capacity:
+    storage: 30Gi
+---
+# The populator CDI created for the clone. Its spec.source is the very PVC the
+# DataVolume declares, so the two do NOT disagree.
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: VolumeCloneSource
+metadata:
+  name: volume-clone-source-923d03bf-c651-4782-8887-44171f171d6c
+  namespace: playground
+spec:
+  source:
+    kind: PersistentVolumeClaim
+    name: fedora-1217dcc8c58d
+---
+# Recreated by the InPlace restore: same name, but created AFTER the snapshot.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vm-snapshot-test
+  namespace: playground
+  creationTimestamp: "2026-07-30T10:07:32Z"
+spec:
+  storageClassName: deerls6pst303v4
+  volumeMode: Block
+  accessModes: ["ReadWriteMany"]
+  volumeName: pvc-3395cfb3-5518-4d2d-90c8-c534f55d9c16
+  resources:
+    requests:
+      storage: 30Gi
+  dataSourceRef:
+    apiGroup: snapshot.storage.k8s.io
+    kind: VolumeSnapshot
+    name: vmsnapshot-b7fee618-volume-rootdisk
+status:
+  phase: Bound
+  capacity:
+    storage: 30Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pvc-3395cfb3-5518-4d2d-90c8-c534f55d9c16
+spec:
+  persistentVolumeReclaimPolicy: Delete
+  capacity:
+    storage: 30Gi
+  claimRef:
+    name: vm-snapshot-test
+    namespace: playground
+  csi:
+    driver: pxd.portworx.com
+    volumeHandle: d2a7ffd7-cc0f-daad-c67d-826478f75cdd
+status:
+  phase: Bound
+---
+apiVersion: pure.portworx.com/v1alpha1
+kind: PureVolume
+metadata:
+  name: d2a7ffd7-cc0f-daad-c67d-826478f75cdd
+spec:
+  volumeName: px_def03c34-pvc-3395cfb3-5518-4d2d-90c8-c534f55d9c16
+  serial: 6B73C330FD41473B0005FFFF
+  volumeID: d2a7ffd7-cc0f-daad-c67d-826478f75cdd
+  podName: ops-303
+  storageBackendType: FlashArray
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: deerls6pst303v4
+provisioner: pxd.portworx.com
+volumeBindingMode: Immediate
+reclaimPolicy: Delete
+allowVolumeExpansion: true
+---
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotClass
+metadata:
+  name: px-csi-snapclass
+  annotations:
+    snapshot.storage.kubernetes.io/is-default-class: "true"
+driver: pxd.portworx.com
+deletionPolicy: Delete
+---
+apiVersion: snapshot.kubevirt.io/v1beta1
+kind: VirtualMachineSnapshot
+metadata:
+  name: vm-snapshot-test-snapshot-20260730-120700
+  namespace: playground
+spec:
+  source:
+    kind: VirtualMachine
+    name: vm-snapshot-test
+status:
+  creationTime: "2026-07-30T10:07:02Z"
+  phase: Succeeded
+  readyToUse: true
+  virtualMachineSnapshotContentName: vmsnapshot-content-b7fee618
+  snapshotVolumes:
+    includedVolumes: ["rootdisk"]
+    excludedVolumes: ["cloudinitdisk"]
+---
+apiVersion: snapshot.kubevirt.io/v1beta1
+kind: VirtualMachineSnapshotContent
+metadata:
+  name: vmsnapshot-content-b7fee618
+  namespace: playground
+spec:
+  virtualMachineSnapshotName: vm-snapshot-test-snapshot-20260730-120700
+  volumeBackups:
+    - volumeName: rootdisk
+      volumeSnapshotName: vmsnapshot-b7fee618-volume-rootdisk
+      persistentVolumeClaim:
+        metadata:
+          name: vm-snapshot-test
+        spec:
+          storageClassName: deerls6pst303v4
+          volumeMode: Block
+          resources:
+            requests:
+              storage: 30Gi
+status:
+  creationTime: "2026-07-30T10:07:02Z"
+  readyToUse: true
+  volumeSnapshotStatus:
+    - volumeSnapshotName: vmsnapshot-b7fee618-volume-rootdisk
+      readyToUse: true
+---
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshot
+metadata:
+  name: vmsnapshot-b7fee618-volume-rootdisk
+  namespace: playground
+spec:
+  source:
+    persistentVolumeClaimName: vm-snapshot-test
+  volumeSnapshotClassName: px-csi-snapclass
+status:
+  boundVolumeSnapshotContentName: snapcontent-17c92eca
+  creationTime: "2026-07-30T10:07:02Z"
+  readyToUse: true
+  restoreSize: 30Gi
+---
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotContent
+metadata:
+  name: snapcontent-17c92eca
+spec:
+  deletionPolicy: Delete
+  driver: pxd.portworx.com
+  sourceVolumeMode: Block
+  source:
+    # The original volume, destroyed by the InPlace restore.
+    volumeHandle: 7e17546c-adeb-db8b-af94-9ee7702b494b
+  volumeSnapshotRef:
+    name: vmsnapshot-b7fee618-volume-rootdisk
+    namespace: playground
+status:
+  readyToUse: true
+  restoreSize: 30Gi
+  snapshotHandle: 5145aa09-7075-d37c-1eeb-968e3c26c3d5
+---
+# Note: snapshotName carries NO parent volume, unlike the "<volume>.<suffix>" form.
+apiVersion: pure.portworx.com/v1alpha1
+kind: PureSnapshot
+metadata:
+  name: 5145aa09-7075-d37c-1eeb-968e3c26c3d5
+spec:
+  snapshotName: px_def03c34-snapshot-17c92eca-be77-402e-b7a4-f52f36f5dad3
+  snapshotID: 5145aa09-7075-d37c-1eeb-968e3c26c3d5
+  podName: ops-303
+  storageBackendType: FlashArray
+---
+apiVersion: snapshot.kubevirt.io/v1beta1
+kind: VirtualMachineRestore
+metadata:
+  name: restore-vm-snapshot-test-1785406050856
+  namespace: playground
+  creationTimestamp: "2026-07-30T10:07:30Z"
+spec:
+  target:
+    apiGroup: kubevirt.io
+    kind: VirtualMachine
+    name: vm-snapshot-test
+  virtualMachineSnapshotName: vm-snapshot-test-snapshot-20260730-120700
+  volumeRestorePolicy: InPlace
+status:
+  complete: true
+  restoreTime: "2026-07-30T10:07:32Z"
+  restores:
+    - volumeName: rootdisk
+      persistentVolumeClaim: vm-snapshot-test
+      volumeSnapshotName: vmsnapshot-b7fee618-volume-rootdisk
+      dataVolumeName: vm-snapshot-test
+  conditions:
+    - type: Ready
+      status: "True"
