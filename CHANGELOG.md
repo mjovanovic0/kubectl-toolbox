@@ -6,6 +6,23 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- The array-side parent-volume check silently did nothing when a Portworx snapshot
+  name carried no parent (`px_<cluster>-snapshot-<uuid>` rather than
+  `<volume>.<suffix>`). Silence read as "checked and fine"; it now states that the
+  name cannot be used and points at the origin-volume lookup instead.
+- CDI volume populators are resolved to the object they wrap, so a PVC populated
+  through a `VolumeCloneSource` is no longer reported as disagreeing with its
+  DataVolume when both name the same source. A genuine disagreement is still
+  reported.
+- `source PVC still exists` compared names only, so after an `InPlace` restore --
+  which recreates the PVC under the same name -- a different, newer volume was
+  reported as the captured disk. Creation time is now compared against the
+  snapshot.
+- `spec.volumeRestorePolicy` is shown on a restore, since `InPlace` is what
+  explains a reused PVC name.
+
 ### Changed
 
 - Upgraded the Kubernetes client libraries to 0.36.3, `spf13/cobra` to 1.10.2 and
