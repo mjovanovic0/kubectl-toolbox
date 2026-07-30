@@ -1,0 +1,251 @@
+# The urt-f03 shape: a restore stalled not because the target VM is running (it is
+# Stopped) but because the CSI driver cannot provision from the snapshot -- the
+# array reports the source object does not exist, while Kubernetes still records
+# the VolumeSnapshot as readyToUse.
+---
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: urt-f03
+  namespace: devc-org200
+spec:
+  runStrategy: RerunOnFailure
+  template:
+    spec:
+      volumes:
+        - name: rootdisk
+          persistentVolumeClaim:
+            claimName: restore-6b2182d9-rootdisk
+status:
+  printableStatus: Stopped
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: restore-6b2182d9-rootdisk
+  namespace: devc-org200
+spec:
+  storageClassName: deerls6pst303v3
+  volumeMode: Block
+  accessModes: ["ReadWriteMany"]
+  volumeName: pvc-3f459846-4bf1-46db-b4ca-faff891d8c2e
+  resources:
+    requests:
+      storage: "171798691840"
+status:
+  phase: Bound
+  capacity:
+    storage: 160Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pvc-3f459846-4bf1-46db-b4ca-faff891d8c2e
+spec:
+  persistentVolumeReclaimPolicy: Delete
+  capacity:
+    storage: 160Gi
+  claimRef:
+    name: restore-6b2182d9-rootdisk
+    namespace: devc-org200
+  csi:
+    driver: pxd.portworx.com
+    volumeHandle: 4400a791-f068-1585-b10c-1734bce0e130
+status:
+  phase: Bound
+---
+apiVersion: pure.portworx.com/v1alpha1
+kind: PureVolume
+metadata:
+  name: 4400a791-f068-1585-b10c-1734bce0e130
+spec:
+  volumeName: px_fcb5d0f0-pvc-3f459846-4bf1-46db-b4ca-faff891d8c2e
+  serial: 6B73C330FD41473B000211A0
+  volumeID: 4400a791-f068-1585-b10c-1734bce0e130
+  podName: p-303
+  storageBackendType: FlashArray
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: deerls6pst303v3
+provisioner: pxd.portworx.com
+volumeBindingMode: Immediate
+reclaimPolicy: Delete
+allowVolumeExpansion: true
+---
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotClass
+metadata:
+  name: px-csi-snapclass
+driver: pxd.portworx.com
+deletionPolicy: Delete
+---
+apiVersion: snapshot.kubevirt.io/v1beta1
+kind: VirtualMachineSnapshot
+metadata:
+  name: urt-f03-snap
+  namespace: devc-org200
+spec:
+  source:
+    kind: VirtualMachine
+    name: urt-f03
+status:
+  creationTime: "2026-06-24T14:08:18Z"
+  phase: Succeeded
+  readyToUse: true
+  virtualMachineSnapshotContentName: vmsnapshot-content-2c5f40ec
+---
+apiVersion: snapshot.kubevirt.io/v1beta1
+kind: VirtualMachineSnapshotContent
+metadata:
+  name: vmsnapshot-content-2c5f40ec
+  namespace: devc-org200
+spec:
+  virtualMachineSnapshotName: urt-f03-snap
+  volumeBackups:
+    - volumeName: rootdisk
+      volumeSnapshotName: vmsnapshot-2c5f40ec-volume-rootdisk
+      persistentVolumeClaim:
+        metadata:
+          name: urt-f03-rootdisk
+        spec:
+          storageClassName: deerls6pst303v3
+          volumeMode: Block
+          resources:
+            requests:
+              storage: "171798691840"
+status:
+  creationTime: "2026-06-24T14:08:18Z"
+  readyToUse: true
+  volumeSnapshotStatus:
+    - volumeSnapshotName: vmsnapshot-2c5f40ec-volume-rootdisk
+      readyToUse: true
+---
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshot
+metadata:
+  name: vmsnapshot-2c5f40ec-volume-rootdisk
+  namespace: devc-org200
+spec:
+  source:
+    persistentVolumeClaimName: urt-f03-rootdisk
+  volumeSnapshotClassName: px-csi-snapclass
+status:
+  boundVolumeSnapshotContentName: snapcontent-7b54dd2e
+  creationTime: "2026-06-24T14:08:17Z"
+  readyToUse: true
+  restoreSize: 160Gi
+---
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotContent
+metadata:
+  name: snapcontent-7b54dd2e
+spec:
+  deletionPolicy: Delete
+  driver: pxd.portworx.com
+  sourceVolumeMode: Block
+  source:
+    volumeHandle: 48157073-6ad0-bbe9-328e-6661a7114a7c
+  volumeSnapshotRef:
+    name: vmsnapshot-2c5f40ec-volume-rootdisk
+    namespace: devc-org200
+status:
+  readyToUse: true
+  restoreSize: 171798691840
+  snapshotHandle: c80fce94-dfbd-cb43-69b9-b957134f8c5b
+---
+# The snapshot metadata still exists in Kubernetes. Its parent volume
+# px_fcb5d0f0-pvc-80eb6559-... is deliberately absent: that is what makes the
+# snapshot unrestorable despite readyToUse=true.
+apiVersion: pure.portworx.com/v1alpha1
+kind: PureSnapshot
+metadata:
+  name: c80fce94-dfbd-cb43-69b9-b957134f8c5b
+spec:
+  snapshotName: px_fcb5d0f0-pvc-80eb6559-b5f0-4913-9b07-19bb22cb289c.snapshot-7b54dd2e
+  snapshotID: c80fce94-dfbd-cb43-69b9-b957134f8c5b
+  podName: p-303
+  storageBackendType: FlashArray
+---
+apiVersion: snapshot.kubevirt.io/v1beta1
+kind: VirtualMachineRestore
+metadata:
+  name: restore-urt-f03-snap-1785136972447
+  namespace: devc-org200
+  creationTimestamp: "2026-07-28T09:03:47Z"
+spec:
+  target:
+    apiGroup: kubevirt.io
+    kind: VirtualMachine
+    name: urt-f03
+  virtualMachineSnapshotName: urt-f03-snap
+status:
+  complete: false
+  restores:
+    - volumeName: rootdisk
+      persistentVolumeClaim: restore-58252881-rootdisk
+      volumeSnapshotName: vmsnapshot-2c5f40ec-volume-rootdisk
+  conditions:
+    - type: Progressing
+      status: "True"
+      reason: Reconciling
+      message: Creating new PVCs
+    - type: Ready
+      status: "False"
+      reason: Reconciling
+      message: Waiting for new PVCs
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: restore-58252881-rootdisk
+  namespace: devc-org200
+  ownerReferences:
+    - apiVersion: kubevirt.io/v1
+      kind: VirtualMachine
+      name: urt-f03
+      uid: 1111-2222
+spec:
+  storageClassName: deerls6pst303v3
+  volumeMode: Block
+  accessModes: ["ReadWriteMany"]
+  resources:
+    requests:
+      storage: "171798691840"
+  dataSourceRef:
+    apiGroup: snapshot.storage.k8s.io
+    kind: VolumeSnapshot
+    name: vmsnapshot-2c5f40ec-volume-rootdisk
+status:
+  phase: Pending
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: prov-fail-1
+  namespace: devc-org200
+involvedObject:
+  kind: PersistentVolumeClaim
+  namespace: devc-org200
+  name: restore-58252881-rootdisk
+type: Warning
+reason: ProvisioningFailed
+message: 'failed to provision volume with StorageClass "deerls6pst303v3": rpc error: code = Internal desc = flasharray backend provisioning failed: Failed to create volume(400): Msg1: No such volume or snapshot.'
+count: 17
+lastTimestamp: "2026-07-30T06:32:24Z"
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: prov-normal-1
+  namespace: devc-org200
+involvedObject:
+  kind: PersistentVolumeClaim
+  namespace: devc-org200
+  name: restore-58252881-rootdisk
+type: Normal
+reason: ExternalProvisioning
+message: Waiting for a volume to be created either by the external provisioner 'pxd.portworx.com' or manually by the system administrator.
+count: 185
+lastTimestamp: "2026-07-30T06:30:19Z"

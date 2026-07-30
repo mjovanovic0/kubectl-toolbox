@@ -1,0 +1,86 @@
+# Fixture for inconsistent back-references and an unmatched array handle.
+# Captured in the shape `oc get ... -o yaml` produces, so this also exercises
+# unwrapping of kind: List.
+apiVersion: v1
+kind: List
+items:
+  - apiVersion: snapshot.kubevirt.io/v1beta1
+    kind: VirtualMachineSnapshot
+    metadata:
+      name: snap-bad
+      namespace: virt-prod
+    spec:
+      source:
+        kind: VirtualMachine
+        name: vm-bad
+    status:
+      phase: InProgress
+      readyToUse: false
+      virtualMachineSnapshotContentName: content-bad
+      error:
+        message: 'timed out waiting for volume snapshots to become ready'
+  - apiVersion: snapshot.kubevirt.io/v1beta1
+    kind: VirtualMachineSnapshotContent
+    metadata:
+      name: content-bad
+      namespace: virt-prod
+    spec:
+      # Deliberately disagrees with the snapshot that references it.
+      virtualMachineSnapshotName: snap-somethingelse
+      volumeBackups:
+        - volumeName: rootdisk
+          volumeSnapshotName: vs-bad
+          persistentVolumeClaim:
+            metadata:
+              name: vm-bad-root
+            spec:
+              storageClassName: pure-block
+              resources:
+                requests:
+                  storage: 30Gi
+    status:
+      readyToUse: false
+      volumeSnapshotStatus:
+        - volumeSnapshotName: vs-bad
+          readyToUse: false
+        - volumeSnapshotName: vs-orphaned-status-entry
+          readyToUse: false
+  - apiVersion: snapshot.storage.k8s.io/v1
+    kind: VolumeSnapshot
+    metadata:
+      name: vs-bad
+      namespace: virt-prod
+    spec:
+      source:
+        # Disagrees with the PVC recorded in the volumeBackup above.
+        persistentVolumeClaimName: some-unrelated-pvc
+      volumeSnapshotClassName: pure-snapshotclass
+    status:
+      boundVolumeSnapshotContentName: snapcontent-bad
+      readyToUse: false
+  - apiVersion: snapshot.storage.k8s.io/v1
+    kind: VolumeSnapshotContent
+    metadata:
+      name: snapcontent-bad
+    spec:
+      driver: pure-csi
+      deletionPolicy: Retain
+      source:
+        volumeHandle: pure-fa1::vm-bad-root
+      volumeSnapshotRef:
+        # Crossed back-reference: points at a different VolumeSnapshot.
+        name: vs-someone-else
+        namespace: virt-prod
+    status:
+      readyToUse: false
+      # A handle exists on paper but no PureSnapshot CR matches it.
+      snapshotHandle: pure-fa1::vm-bad-root.snap-orphan
+  - apiVersion: pure.portworx.com/v1alpha1
+    kind: PureSnapshot
+    metadata:
+      name: puresnapshot-unrelated
+    spec:
+      snapshotName: some-other-volume.snap-1
+      snapshotID: "1"
+      podName: vg-prod
+      storageBackendType: FlashArray

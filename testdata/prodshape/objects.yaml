@@ -1,0 +1,433 @@
+# Reproduces the shape seen on a real Portworx/FlashArray cluster:
+#  - a VM running on a restore-created DataVolume whose spec.source still names
+#    the original clone source, while the PVC was actually populated from a snapshot
+#  - Quantity values serialised as bare digits (171798691840)
+#  - two VirtualMachineRestores for one snapshot, the second never completed
+#  - the snapshot's source PVC already deleted
+---
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: urt-f12
+  namespace: devc-org200
+spec:
+  runStrategy: RerunOnFailure
+  template:
+    spec:
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: restore-6f4117e6-6a9a-487f-8291-95c84e1d7811-rootdisk
+        - name: sysprep
+          sysprep:
+            configMap:
+              name: sysprep-config
+status:
+  printableStatus: Running
+---
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataVolume
+metadata:
+  name: restore-6f4117e6-6a9a-487f-8291-95c84e1d7811-rootdisk
+  namespace: devc-org200
+spec:
+  # Templated from the VM's original clone source, NOT what populated the PVC.
+  source:
+    pvc:
+      name: org200-t-srv25-rootdisk
+      namespace: devc-org200
+status:
+  claimName: restore-6f4117e6-6a9a-487f-8291-95c84e1d7811-rootdisk
+  phase: Succeeded
+  progress: N/A
+  conditions:
+    - type: Running
+      status: "False"
+    - type: Bound
+      status: "True"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: org200-t-srv25-rootdisk
+  namespace: devc-org200
+spec:
+  storageClassName: deerls6pst303v3
+  volumeMode: Block
+status:
+  phase: Bound
+  capacity:
+    storage: 140Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: restore-6f4117e6-6a9a-487f-8291-95c84e1d7811-rootdisk
+  namespace: devc-org200
+spec:
+  storageClassName: deerls6pst303v3
+  volumeMode: Block
+  accessModes: ["ReadWriteMany"]
+  volumeName: pvc-df3538e2-30e8-46da-b2bf-a9ff57c982e7
+  resources:
+    requests:
+      # A Quantity may legitimately carry no unit suffix.
+      storage: "171798691840"
+  dataSourceRef:
+    apiGroup: snapshot.storage.k8s.io
+    kind: VolumeSnapshot
+    name: vmsnapshot-103e9e1b-f65a-4f3c-8a8b-e9fc48245f3e-volume-rootdisk
+status:
+  phase: Bound
+  capacity:
+    storage: 160Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pvc-df3538e2-30e8-46da-b2bf-a9ff57c982e7
+spec:
+  persistentVolumeReclaimPolicy: Delete
+  capacity:
+    storage: 160Gi
+  claimRef:
+    name: restore-6f4117e6-6a9a-487f-8291-95c84e1d7811-rootdisk
+    namespace: devc-org200
+  csi:
+    driver: pxd.portworx.com
+    volumeHandle: a7596e67-4c56-917b-2c28-3d7b0cb20217
+    volumeAttributes:
+      backend: pure_block
+status:
+  phase: Bound
+---
+apiVersion: pure.portworx.com/v1alpha1
+kind: PureVolume
+metadata:
+  name: a7596e67-4c56-917b-2c28-3d7b0cb20217
+spec:
+  volumeName: px_fcb5d0f0-pvc-df3538e2-30e8-46da-b2bf-a9ff57c982e7
+  serial: 6B73C330FD41473B000211A4
+  volumeID: a7596e67-4c56-917b-2c28-3d7b0cb20217
+  podName: p-303
+  storageBackendType: FlashArray
+  storageBackends:
+    - id: 6b73c330-fd41-473b-8c09-d25220796b09
+---
+apiVersion: snapshot.kubevirt.io/v1beta1
+kind: VirtualMachineSnapshot
+metadata:
+  name: urt-f12-snap
+  namespace: devc-org200
+spec:
+  source:
+    apiGroup: kubevirt.io
+    kind: VirtualMachine
+    name: urt-f12
+status:
+  creationTime: "2026-06-24T14:09:47Z"
+  phase: Succeeded
+  readyToUse: true
+  virtualMachineSnapshotContentName: vmsnapshot-content-103e9e1b-f65a-4f3c-8a8b-e9fc48245f3e
+  snapshotVolumes:
+    includedVolumes: ["rootdisk"]
+    excludedVolumes: ["sysprep"]
+---
+apiVersion: snapshot.kubevirt.io/v1beta1
+kind: VirtualMachineSnapshotContent
+metadata:
+  name: vmsnapshot-content-103e9e1b-f65a-4f3c-8a8b-e9fc48245f3e
+  namespace: devc-org200
+spec:
+  virtualMachineSnapshotName: urt-f12-snap
+  volumeBackups:
+    - volumeName: rootdisk
+      volumeSnapshotName: vmsnapshot-103e9e1b-f65a-4f3c-8a8b-e9fc48245f3e-volume-rootdisk
+      persistentVolumeClaim:
+        metadata:
+          # Already deleted on the cluster.
+          name: urt-f12-rootdisk
+        spec:
+          storageClassName: deerls6pst303v3
+          volumeMode: Block
+          resources:
+            requests:
+              storage: "171798691840"
+status:
+  creationTime: "2026-06-24T14:09:47Z"
+  readyToUse: true
+  volumeSnapshotStatus:
+    - volumeSnapshotName: vmsnapshot-103e9e1b-f65a-4f3c-8a8b-e9fc48245f3e-volume-rootdisk
+      readyToUse: true
+---
+# Completed restore.
+apiVersion: snapshot.kubevirt.io/v1beta1
+kind: VirtualMachineRestore
+metadata:
+  name: restore-urt-f12-20260625-155250
+  namespace: devc-org200
+  uid: 6f4117e6-6a9a-487f-8291-95c84e1d7811
+  creationTimestamp: "2026-06-25T13:52:50Z"
+spec:
+  target:
+    apiGroup: kubevirt.io
+    kind: VirtualMachine
+    name: urt-f12
+  virtualMachineSnapshotName: urt-f12-snap
+status:
+  complete: true
+  restoreTime: "2026-06-25T13:52:57Z"
+  restores:
+    - volumeName: rootdisk
+      persistentVolumeClaim: restore-6f4117e6-6a9a-487f-8291-95c84e1d7811-rootdisk
+      volumeSnapshotName: vmsnapshot-103e9e1b-f65a-4f3c-8a8b-e9fc48245f3e-volume-rootdisk
+      dataVolumeName: restore-6f4117e6-6a9a-487f-8291-95c84e1d7811-rootdisk
+  deletedDataVolumes:
+    - urt-f12-rootdisk
+  conditions:
+    - type: Ready
+      status: "True"
+---
+# Stuck restore: never completed, target VM is still running.
+apiVersion: snapshot.kubevirt.io/v1beta1
+kind: VirtualMachineRestore
+metadata:
+  name: restore-urt-f12-snap-1784811827447
+  namespace: devc-org200
+  uid: 9a2c77d1-4e55-4bb0-9f21-2c0f5a7b1234
+  creationTimestamp: "2026-07-23T09:03:47Z"
+spec:
+  target:
+    apiGroup: kubevirt.io
+    kind: VirtualMachine
+    name: urt-f12
+  virtualMachineSnapshotName: urt-f12-snap
+  targetReadinessPolicy: WaitGracePeriod
+status:
+  complete: false
+  restores:
+    - volumeName: rootdisk
+      persistentVolumeClaim: restore-0bd08e71-0a0f-45ad-8efa-52d42f0b205b-rootdisk
+      volumeSnapshotName: vmsnapshot-103e9e1b-f65a-4f3c-8a8b-e9fc48245f3e-volume-rootdisk
+  conditions:
+    - type: Failure
+      status: "True"
+      message: Restore target failed to be ready within 5m0s. Please power off the target VM before attempting restore
+    - type: Ready
+      status: "False"
+      message: Restore target failed to be ready within 5m0s. Please power off the target VM before attempting restore
+---
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshot
+metadata:
+  name: vmsnapshot-103e9e1b-f65a-4f3c-8a8b-e9fc48245f3e-volume-rootdisk
+  namespace: devc-org200
+spec:
+  source:
+    persistentVolumeClaimName: urt-f12-rootdisk
+  volumeSnapshotClassName: px-csi-snapclass
+status:
+  boundVolumeSnapshotContentName: snapcontent-9b5fd08e-b450-4fb8-9e18-b8bb6e89bcd9
+  creationTime: "2026-06-24T14:09:46Z"
+  readyToUse: true
+  restoreSize: 160Gi
+---
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotContent
+metadata:
+  name: snapcontent-9b5fd08e-b450-4fb8-9e18-b8bb6e89bcd9
+spec:
+  deletionPolicy: Delete
+  driver: pxd.portworx.com
+  sourceVolumeMode: Block
+  volumeSnapshotClassName: px-csi-snapclass
+  source:
+    # The original array volume, whose PureVolume is already reclaimed.
+    volumeHandle: e1498acb-5ef3-280e-f3a8-59ff29038e22
+  volumeSnapshotRef:
+    name: vmsnapshot-103e9e1b-f65a-4f3c-8a8b-e9fc48245f3e-volume-rootdisk
+    namespace: devc-org200
+status:
+  readyToUse: true
+  restoreSize: 171798691840
+  snapshotHandle: 9c1b16f7-4f59-b969-22df-a1e5e697096c
+---
+apiVersion: pure.portworx.com/v1alpha1
+kind: PureSnapshot
+metadata:
+  name: 9c1b16f7-4f59-b969-22df-a1e5e697096c
+spec:
+  snapshotName: px_fcb5d0f0-pvc-9e5d7af0-0305-4879-8c73-41eb19c36180.snapshot-9b5fd08e-b450-4fb8-9e18-b8bb6e89bcd9
+  snapshotID: 9c1b16f7-4f59-b969-22df-a1e5e697096c
+  podName: p-303
+  storageBackendType: FlashArray
+  storageBackends:
+    - id: 6b73c330-fd41-473b-8c09-d25220796b09
+---
+# Created by the failed restore and left behind: no ownerReferences, so nothing
+# will ever garbage-collect it.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: restore-0bd08e71-0a0f-45ad-8efa-52d42f0b205b-rootdisk
+  namespace: devc-org200
+  ownerReferences:
+    - apiVersion: kubevirt.io/v1
+      kind: VirtualMachine
+      name: urt-f12
+      uid: 11111111-2222-3333-4444-555555555555
+spec:
+  storageClassName: deerls6pst303v3
+  volumeMode: Block
+  accessModes: ["ReadWriteMany"]
+  resources:
+    requests:
+      storage: "171798691840"
+  dataSourceRef:
+    apiGroup: snapshot.storage.k8s.io
+    kind: VolumeSnapshot
+    name: vmsnapshot-103e9e1b-f65a-4f3c-8a8b-e9fc48245f3e-volume-rootdisk
+status:
+  phase: Pending
+---
+# Unused by the stray PVC above, which never bound.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pvc-orphan-4c9a1f22-1111-2222-3333-444455556666
+spec:
+  persistentVolumeReclaimPolicy: Delete
+  capacity:
+    storage: 160Gi
+  claimRef:
+    name: restore-0bd08e71-0a0f-45ad-8efa-52d42f0b205b-rootdisk
+    namespace: devc-org200
+  csi:
+    driver: pxd.portworx.com
+    volumeHandle: bb31f7d4-9c22-41ae-b8e0-77aa19e4c501
+    volumeAttributes:
+      backend: pure_block
+status:
+  phase: Bound
+---
+apiVersion: pure.portworx.com/v1alpha1
+kind: PureVolume
+metadata:
+  name: bb31f7d4-9c22-41ae-b8e0-77aa19e4c501
+spec:
+  volumeName: px_fcb5d0f0-pvc-orphan-4c9a1f22-1111-2222-3333-444455556666
+  serial: 6B73C330FD41473B000299FF
+  volumeID: bb31f7d4-9c22-41ae-b8e0-77aa19e4c501
+  podName: p-303
+  storageBackendType: FlashArray
+  storageBackends:
+    - id: 6b73c330-fd41-473b-8c09-d25220796b09
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: deerls6pst303v3
+provisioner: pxd.portworx.com
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+---
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotClass
+metadata:
+  name: px-csi-snapclass
+  annotations:
+    snapshot.storage.kubernetes.io/is-default-class: "true"
+driver: pxd.portworx.com
+deletionPolicy: Delete
+---
+apiVersion: storage.k8s.io/v1
+kind: VolumeAttachment
+metadata:
+  name: csi-attach-urt-f12-rootdisk
+spec:
+  attacher: pxd.portworx.com
+  nodeName: worker-03.pos-cloud.lan
+  source:
+    persistentVolumeName: pvc-df3538e2-30e8-46da-b2bf-a9ff57c982e7
+status:
+  attached: true
+---
+apiVersion: kubevirt.io/v1
+kind: VirtualMachineInstance
+metadata:
+  name: urt-f12
+  namespace: devc-org200
+  uid: 7c2e1a90-aaaa-bbbb-cccc-ddddeeeeffff
+status:
+  phase: Running
+  nodeName: worker-03.pos-cloud.lan
+  conditions:
+    - type: Ready
+      status: "True"
+    - type: LiveMigratable
+      status: "False"
+      reason: DisksNotLiveMigratable
+      message: cannot migrate VMI which does not use shared filesystem for disks
+  volumeStatus:
+    - name: rootdisk
+      target: sda
+      phase: Ready
+      persistentVolumeClaimInfo:
+        claimName: restore-6f4117e6-6a9a-487f-8291-95c84e1d7811-rootdisk
+        volumeMode: Block
+    - name: windows-drivers-disk
+      target: sdb
+      phase: Ready
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: virt-launcher-urt-f12-x9k2p
+  namespace: devc-org200
+  labels:
+    kubevirt.io: virt-launcher
+    kubevirt.io/created-by: 7c2e1a90-aaaa-bbbb-cccc-ddddeeeeffff
+spec:
+  nodeName: worker-03.pos-cloud.lan
+  volumes:
+    - name: rootdisk
+      persistentVolumeClaim:
+        claimName: restore-6f4117e6-6a9a-487f-8291-95c84e1d7811-rootdisk
+status:
+  phase: Running
+  conditions:
+    - type: Ready
+      status: "True"
+---
+# A Warning event on the stray PVC: this is the kind of signal that answers
+# "why is it Pending" and was previously invisible to the tool.
+apiVersion: v1
+kind: Event
+metadata:
+  name: restore-0bd08e71-evt-1
+  namespace: devc-org200
+involvedObject:
+  kind: PersistentVolumeClaim
+  namespace: devc-org200
+  name: restore-0bd08e71-0a0f-45ad-8efa-52d42f0b205b-rootdisk
+type: Normal
+reason: WaitForFirstConsumer
+message: waiting for first consumer to be created before binding
+count: 214
+lastTimestamp: "2026-07-30T08:41:02Z"
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: restore-vmrestore-evt-1
+  namespace: devc-org200
+involvedObject:
+  kind: VirtualMachineRestore
+  namespace: devc-org200
+  name: restore-urt-f12-snap-1784811827447
+type: Warning
+reason: VirtualMachineRestoreError
+message: 'restore target urt-f12 is running: power off the target VM before attempting restore'
+count: 17
+lastTimestamp: "2026-07-30T08:12:44Z"

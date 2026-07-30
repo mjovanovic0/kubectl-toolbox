@@ -1,0 +1,371 @@
+---
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: win-db-01
+  namespace: virt-prod
+  uid: 11111111-2222-3333-4444-555555555555
+spec:
+  running: true
+  dataVolumeTemplates:
+    - metadata:
+        name: win-db-01-root
+      spec:
+        sourceRef:
+          kind: DataSource
+          name: win2022
+          namespace: openshift-virtualization-os-images
+    - metadata:
+        name: win-db-01-data
+      spec:
+        storage:
+          resources:
+            requests:
+              storage: 100Gi
+  template:
+    spec:
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: win-db-01-root
+        - name: datadisk
+          persistentVolumeClaim:
+            claimName: win-db-01-data
+        - name: logdisk
+          persistentVolumeClaim:
+            claimName: win-db-01-log
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userDataBase64: I2Nsb3VkLWNvbmZpZwo=
+status:
+  printableStatus: Running
+---
+apiVersion: snapshot.kubevirt.io/v1beta1
+kind: VirtualMachineSnapshot
+metadata:
+  name: snap-2026-07-20
+  namespace: virt-prod
+spec:
+  source:
+    apiGroup: kubevirt.io
+    kind: VirtualMachine
+    name: win-db-01
+  deletionPolicy: delete
+status:
+  creationTime: "2026-07-20T02:15:11Z"
+  phase: Succeeded
+  readyToUse: true
+  sourceUID: 11111111-2222-3333-4444-555555555555
+  virtualMachineSnapshotContentName: vmsnapshot-content-8f3a
+  indications:
+    - Online
+    - GuestAgent
+  snapshotVolumes:
+    includedVolumes:
+      - rootdisk
+      - datadisk
+    excludedVolumes:
+      - logdisk
+---
+apiVersion: snapshot.kubevirt.io/v1beta1
+kind: VirtualMachineSnapshotContent
+metadata:
+  name: vmsnapshot-content-8f3a
+  namespace: virt-prod
+spec:
+  virtualMachineSnapshotName: snap-2026-07-20
+  source:
+    virtualMachine:
+      metadata:
+        name: win-db-01
+  volumeBackups:
+    - volumeName: rootdisk
+      volumeSnapshotName: vmsnapshot-8f3a-vol-rootdisk
+      persistentVolumeClaim:
+        metadata:
+          name: win-db-01-root
+        spec:
+          storageClassName: pure-block
+          volumeMode: Block
+          accessModes: ["ReadWriteMany"]
+          resources:
+            requests:
+              storage: 20Gi
+    - volumeName: datadisk
+      volumeSnapshotName: vmsnapshot-8f3a-vol-datadisk
+      persistentVolumeClaim:
+        metadata:
+          name: win-db-01-data
+        spec:
+          storageClassName: pure-block
+          volumeMode: Block
+          resources:
+            requests:
+              storage: 100Gi
+    - volumeName: logdisk
+      persistentVolumeClaim:
+        metadata:
+          name: win-db-01-log
+        spec:
+          storageClassName: nfs-legacy
+          resources:
+            requests:
+              storage: 50Gi
+status:
+  creationTime: "2026-07-20T02:15:19Z"
+  readyToUse: true
+  volumeSnapshotStatus:
+    - volumeSnapshotName: vmsnapshot-8f3a-vol-rootdisk
+      creationTime: "2026-07-20T02:15:18Z"
+      readyToUse: true
+    - volumeSnapshotName: vmsnapshot-8f3a-vol-datadisk
+      readyToUse: false
+      error:
+        time: "2026-07-20T02:20:00Z"
+        message: 'Failed to create snapshot: rpc error: code = DeadlineExceeded'
+---
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshot
+metadata:
+  name: vmsnapshot-8f3a-vol-rootdisk
+  namespace: virt-prod
+spec:
+  source:
+    persistentVolumeClaimName: win-db-01-root
+  volumeSnapshotClassName: pure-snapshotclass
+status:
+  boundVolumeSnapshotContentName: snapcontent-1c2d
+  creationTime: "2026-07-20T02:15:18Z"
+  readyToUse: true
+  restoreSize: 20Gi
+---
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotContent
+metadata:
+  name: snapcontent-1c2d
+spec:
+  deletionPolicy: Delete
+  driver: pure-csi
+  volumeSnapshotClassName: pure-snapshotclass
+  sourceVolumeMode: Block
+  source:
+    volumeHandle: pure-fa1::win-db-01-root
+  volumeSnapshotRef:
+    name: vmsnapshot-8f3a-vol-rootdisk
+    namespace: virt-prod
+    uid: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+status:
+  creationTime: 1784686518000000000
+  readyToUse: true
+  restoreSize: 21474836480
+  snapshotHandle: pure-fa1::win-db-01-root.snap-8f3a
+---
+apiVersion: pure.portworx.com/v1alpha1
+kind: PureSnapshot
+metadata:
+  name: puresnapshot-win-db-01-root-snap-8f3a
+spec:
+  snapshotName: win-db-01-root.snap-8f3a
+  snapshotID: "3921"
+  podName: vg-prod
+  policyName: ""
+  storageBackendType: FlashArray
+  storageBackends:
+    - id: fa1
+      iqn: iqn.2010-06.com.purestorage:flasharray.1a2b3c4d
+      targets:
+        - 10.20.30.10
+        - 10.20.30.11
+---
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataVolume
+metadata:
+  name: win-db-01-root
+  namespace: virt-prod
+spec:
+  sourceRef:
+    kind: DataSource
+    name: win2022
+    namespace: openshift-virtualization-os-images
+  storage:
+    resources:
+      requests:
+        storage: 20Gi
+status:
+  claimName: win-db-01-root
+  phase: Succeeded
+  progress: 100.0%
+  restartCount: 0
+---
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataSource
+metadata:
+  name: win2022
+  namespace: openshift-virtualization-os-images
+spec:
+  source:
+    pvc:
+      name: win2022-abc123
+      namespace: openshift-virtualization-os-images
+status:
+  source:
+    pvc:
+      name: win2022-abc123
+      namespace: openshift-virtualization-os-images
+  conditions:
+    - type: Ready
+      status: "True"
+---
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataImportCron
+metadata:
+  name: win2022-image-cron
+  namespace: openshift-virtualization-os-images
+spec:
+  schedule: "0 3 * * *"
+  managedDataSource: win2022
+  template:
+    spec:
+      source:
+        registry:
+          url: docker://registry.redhat.io/rhel9/win2022
+status:
+  lastImportTimestamp: "2026-07-19T03:00:41Z"
+  sourceFormat: pvc
+  lastImportedPVC:
+    name: win2022-abc123
+    namespace: openshift-virtualization-os-images
+  conditions:
+    - type: UpToDate
+      status: "True"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: win2022-abc123
+  namespace: openshift-virtualization-os-images
+spec:
+  storageClassName: pure-block
+  volumeMode: Block
+  accessModes: ["ReadWriteMany"]
+  resources:
+    requests:
+      storage: 20Gi
+status:
+  phase: Bound
+  capacity:
+    storage: 20Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: win-db-01-root
+  namespace: virt-prod
+spec:
+  storageClassName: pure-block
+  volumeMode: Block
+  accessModes: ["ReadWriteMany"]
+  volumeName: pv-win-db-01-root
+  resources:
+    requests:
+      storage: 20Gi
+  dataSourceRef:
+    apiGroup: snapshot.storage.k8s.io
+    kind: VolumeSnapshot
+    name: win2022-golden-snap
+status:
+  phase: Bound
+  capacity:
+    storage: 20Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-win-db-01-root
+spec:
+  persistentVolumeReclaimPolicy: Delete
+  capacity:
+    storage: 20Gi
+  claimRef:
+    name: win-db-01-root
+    namespace: virt-prod
+  csi:
+    driver: pure-csi
+    volumeHandle: pure-fa1::win-db-01-root
+    volumeAttributes:
+      backend: fa1
+      pod: vg-prod
+status:
+  phase: Bound
+---
+apiVersion: pure.portworx.com/v1alpha1
+kind: PureVolume
+metadata:
+  name: purevolume-win-db-01-root
+spec:
+  volumeName: win-db-01-root
+  serial: F4A29B31C7D84E0600011234
+  volumeID: "88213"
+  podName: vg-prod
+  storageBackendType: FlashArray
+  secure: true
+  storageBackends:
+    - id: fa1
+      iqn: iqn.2010-06.com.purestorage:flasharray.1a2b3c4d
+      targets:
+        - 10.20.30.10
+        - 10.20.30.11
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: win-db-01-log
+  namespace: virt-prod
+spec:
+  storageClassName: nfs-legacy
+  accessModes: ["ReadWriteMany"]
+  resources:
+    requests:
+      storage: 50Gi
+status:
+  phase: Pending
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: pure-block
+provisioner: pure-csi
+volumeBindingMode: Immediate
+reclaimPolicy: Delete
+allowVolumeExpansion: true
+---
+# Deliberately has NO VolumeSnapshotClass, which is why logdisk was never captured.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: nfs-legacy
+provisioner: nfs.csi.k8s.io
+volumeBindingMode: Immediate
+reclaimPolicy: Retain
+---
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotClass
+metadata:
+  name: pure-snapshotclass
+driver: pure-csi
+deletionPolicy: Delete
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: win-db-01-log-evt
+  namespace: virt-prod
+involvedObject:
+  kind: PersistentVolumeClaim
+  namespace: virt-prod
+  name: win-db-01-log
+type: Warning
+reason: ProvisioningFailed
+message: 'failed to provision volume with StorageClass "nfs-legacy": rpc error: code = DeadlineExceeded desc = context deadline exceeded'
+count: 88
+lastTimestamp: "2026-07-30T07:15:33Z"
