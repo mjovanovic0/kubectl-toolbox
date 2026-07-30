@@ -3,6 +3,7 @@ package resolve
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -437,13 +438,26 @@ func (r *Resolver) describePVCDataSource(ctx context.Context, ns string, pvc *un
 		}
 		n := node.Add(tree.New(fmt.Sprintf("⤴ spec.%s %s/%s", path, kind, name)).SetState(tree.StateInfo))
 
+		// CDI populators are a level of indirection, not a different origin: a
+		// VolumeCloneSource wraps the very PVC the DataVolume declares. Resolve it
+		// so the comparison below is against the real source, and so the chain does
+		// not dead-end on a wrapper object.
+		effKind, effName, effNS := kind, name, refNS
+		if k2, n2, ns2, ok := r.resolvePopulator(ctx, refNS, kind, name, n); ok {
+			effKind, effName, effNS = k2, n2, ns2
+		}
+
 		// A restored PVC keeps the DataVolume spec it was templated from while
 		// actually being populated from a snapshot. Saying which one delivered the
-		// data avoids chasing the wrong volume on the array.
-		if dvSource != "" && !strings.Contains(dvSource, name) {
+		// data avoids chasing the wrong volume on the array -- but only when they
+		// genuinely differ, which is why the populator is resolved first.
+		if dvSource != "" && effName != "" && !strings.Contains(dvSource, effName) {
 			n.Note("this is what populated the volume; the DataVolume separately declares its source as " + dvSource)
 		}
 
+		if effKind == "VolumeSnapshot" {
+			kind, name, refNS = effKind, effName, effNS
+		}
 		if kind == "VolumeSnapshot" {
 			vs, err := r.src.Get(ctx, source.Ref{Kind: "VolumeSnapshot", Namespace: refNS, Name: name})
 			switch {
@@ -539,6 +553,48 @@ func nonCSIKind(o map[string]interface{}) string {
 		}
 	}
 	return "unknown backend"
+}
+
+// resolvePopulator follows a CDI volume-populator object to the thing it actually
+// clones from.
+//
+// CDI puts a VolumeCloneSource (or VolumeImportSource / VolumeUploadSource)
+// between a PVC and its real source. Reporting the wrapper alone makes the chain
+// dead-end on an object whose name carries no information, and makes a populated
+// PVC look as though its provenance disagrees with its DataVolume when the two are
+// in fact the same thing.
+func (r *Resolver) resolvePopulator(ctx context.Context, ns, kind, name string, node *tree.Node) (string, string, string, bool) {
+	switch kind {
+	case "VolumeCloneSource", "VolumeImportSource", "VolumeUploadSource":
+	default:
+		return "", "", "", false
+	}
+
+	obj, err := r.src.Get(ctx, source.Ref{Kind: kind, Namespace: ns, Name: name})
+	if err != nil {
+		node.Note(kind + " does not exist; CDI deletes a populator once the target PVC is populated")
+		return "", "", "", false
+	}
+
+	// VolumeCloneSource.spec.source is a TypedLocalObjectReference to a PVC or a
+	// VolumeSnapshot in the same namespace.
+	srcKind := nstr(obj.Object, "spec", "source", "kind")
+	srcName := nstr(obj.Object, "spec", "source", "name")
+	if srcKind != "" && srcName != "" {
+		node.Note(fmt.Sprintf("populator wrapping %s/%s", srcKind, srcName))
+		return srcKind, srcName, ns, true
+	}
+
+	// VolumeImportSource carries an import type rather than an object reference.
+	if imp := nmap(obj.Object, "spec", "source"); len(imp) > 0 {
+		kinds := make([]string, 0, len(imp))
+		for k := range imp {
+			kinds = append(kinds, k)
+		}
+		sort.Strings(kinds)
+		node.Note("populator importing from " + strings.Join(kinds, ","))
+	}
+	return "", "", "", false
 }
 
 // pendingHint explains a Pending PVC using the binding mode we actually read,
