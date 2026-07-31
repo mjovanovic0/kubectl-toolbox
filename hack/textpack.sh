@@ -18,7 +18,9 @@ TEXT_ARCH="${TEXT_ARCH:-amd64}"
 COMP="${COMP:-gzip}"
 CHUNK="${CHUNK:-0}"
 VERSION="${VERSION:-dev}"
-MODULE=github.com/mjovanovic0/kubectl-vmstorage
+MODULE=github.com/mjovanovic0/kubectl-toolbox
+COMMIT="${COMMIT:-$(git rev-parse --short HEAD 2>/dev/null || echo unknown)}"
+BUILT="${BUILT:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 
 case "$COMP" in
 gzip) comp_cmd=(gzip -9 -c); decomp=gunzip ;;
@@ -31,13 +33,15 @@ esac
 
 target="${TEXT_OS}-${TEXT_ARCH}"
 outdir=dist
-bin="$outdir/kubectl-vmstorage-$target"
-script="$outdir/kubectl-vmstorage-$target.sh"
+bin="$outdir/kubectl-toolbox-$target"
+script="$outdir/kubectl-toolbox-$target.sh"
 mkdir -p "$outdir"
 
 echo "building $target ..."
 GOOS="$TEXT_OS" GOARCH="$TEXT_ARCH" CGO_ENABLED=0 \
-	go build -trimpath -ldflags "-s -w -X $MODULE/cmd.Version=$VERSION" -o "$bin" .
+	go build -trimpath \
+		-ldflags "-s -w -X $MODULE/internal/version.Version=$VERSION -X $MODULE/internal/version.Commit=$COMMIT -X $MODULE/internal/version.BuildDate=$BUILT" \
+		-o "$bin" .
 
 # sha256 of the binary the host must end up with.
 sum_of() {
@@ -54,13 +58,13 @@ trap 'rm -f "$payload"' EXIT
 # since the host may be either.
 cat >"$script" <<EOF
 #!/bin/sh
-# kubectl-vmstorage  version=$VERSION  target=$TEXT_OS/$TEXT_ARCH  compressor=$COMP
+# kubectl-toolbox  version=$VERSION  target=$TEXT_OS/$TEXT_ARCH  compressor=$COMP
 # Self-extracting. Copy this whole file to the host, then:
 #     sh $(basename "$script") [output-path]
 # Decoded binary sha256: $want
 set -eu
 
-OUT="\${1:-kubectl-vmstorage}"
+OUT="\${1:-kubectl-toolbox}"
 SELF="\$0"
 if [ ! -r "\$SELF" ]; then
 	echo "error: run this as a file (sh $(basename "$script")), not from a pipe" >&2
@@ -74,7 +78,7 @@ command -v $decomp >/dev/null 2>&1 || { echo "error: $decomp not found on this h
 # truncated paste can never leave behind something that looks runnable.
 STAGE="\$OUT.incomplete.\$\$"
 trap 'rm -f "\$STAGE"' EXIT HUP INT TERM
-if ! sed -e '1,/^__VMSTORAGE_PAYLOAD__\$/d' "\$SELF" | base64 \$B64 | $decomp > "\$STAGE"; then
+if ! sed -e '1,/^__TOOLBOX_PAYLOAD__\$/d' "\$SELF" | base64 \$B64 | $decomp > "\$STAGE"; then
 	echo "error: decode failed -- the pasted file is truncated or corrupt" >&2
 	echo "       expected the payload to end with a complete $COMP stream" >&2
 	exit 1
@@ -99,9 +103,9 @@ mv -f "\$STAGE" "\$OUT"
 trap - EXIT HUP INT TERM
 
 echo "wrote \$OUT (\$( [ -n "\$got" ] && echo 'sha256 verified' || echo 'sha256 tool unavailable, NOT verified' ))"
-echo "install with: install -m 0755 \$OUT ~/bin/kubectl-vmstorage   # then: oc vmstorage vm <name> -n <ns>"
+echo "install with: install -m 0755 \$OUT ~/bin/kubectl-toolbox   # then: oc toolbox vmsnapshot vm <name> -n <ns>"
 exit 0
-__VMSTORAGE_PAYLOAD__
+__TOOLBOX_PAYLOAD__
 EOF
 cat "$payload" >>"$script"
 
@@ -110,7 +114,7 @@ echo "verifying round-trip ..."
 check="$(mktemp -d)"
 trap 'rm -f "$payload"; rm -rf "$check"' EXIT
 if printf 'eA==' | base64 -d >/dev/null 2>&1; then b64dec=-d; else b64dec=-D; fi
-sed -e '1,/^__VMSTORAGE_PAYLOAD__$/d' "$script" | base64 "$b64dec" | $decomp >"$check/out"
+sed -e '1,/^__TOOLBOX_PAYLOAD__$/d' "$script" | base64 "$b64dec" | $decomp >"$check/out"
 got="$(sum_of "$check/out")"
 if [ "$got" != "$want" ]; then
 	echo "FAILED: round-trip checksum mismatch (want $want, got $got)" >&2
@@ -121,7 +125,7 @@ if [ "$CHUNK" != "0" ]; then
 	rm -f "$outdir/${target}.part-"*
 	split -b "$((CHUNK * 1024 * 1024))" -a 2 "$payload" "$outdir/${target}.part-"
 	echo "split payload into $(ls "$outdir/${target}.part-"* | wc -l | tr -d ' ') parts of ${CHUNK}MiB"
-	echo "  reassemble: cat ${target}.part-* | base64 -d | $decomp > kubectl-vmstorage && chmod +x kubectl-vmstorage"
+	echo "  reassemble: cat ${target}.part-* | base64 -d | $decomp > kubectl-toolbox && chmod +x kubectl-toolbox"
 fi
 
 bytes=$(wc -c <"$script" | tr -d ' ')

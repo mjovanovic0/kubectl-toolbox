@@ -9,8 +9,8 @@ import (
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
-	"github.com/mjovanovic0/kubectl-vmstorage/internal/source"
-	"github.com/mjovanovic0/kubectl-vmstorage/internal/tree"
+	"github.com/mjovanovic0/kubectl-toolbox/internal/source"
+	"github.com/mjovanovic0/kubectl-toolbox/internal/tree"
 )
 
 // arraySpec describes how to find and display a vendor storage CR.

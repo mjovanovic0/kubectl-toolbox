@@ -2,19 +2,19 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 
-	"github.com/mjovanovic0/kubectl-vmstorage/internal/resolve"
-	"github.com/mjovanovic0/kubectl-vmstorage/internal/source"
-	"github.com/mjovanovic0/kubectl-vmstorage/internal/tree"
+	"github.com/mjovanovic0/kubectl-toolbox/internal/resolve"
+	"github.com/mjovanovic0/kubectl-toolbox/internal/selfupdate"
+	"github.com/mjovanovic0/kubectl-toolbox/internal/source"
+	"github.com/mjovanovic0/kubectl-toolbox/internal/tree"
+	"github.com/mjovanovic0/kubectl-toolbox/internal/version"
 )
-
-// Version is overridden at build time with -ldflags.
-var Version = "dev"
 
 type globals struct {
 	configFlags *genericclioptions.ConfigFlags
@@ -102,17 +102,17 @@ func (g *globals) emit(r *tree.Report) error {
 func NewRootCommand() (*cobra.Command, *globals) {
 	g := &globals{configFlags: genericclioptions.NewConfigFlags(true)}
 
-	// Use is the binary name rather than "kubectl vmstorage": cobra derives every
+	// Use is the binary name rather than "kubectl toolbox": cobra derives every
 	// subcommand's usage line from the first word of Use, so a two-word Use would
 	// render all of them as "kubectl <sub>".
 	root := &cobra.Command{
-		Use:   "kubectl-vmstorage",
+		Use:   "kubectl-toolbox",
 		Short: "Resolve KubeVirt VM snapshot and disk chains down to the storage array",
 		Long: `Resolve the full reference chain behind an OpenShift Virtualization VM's
 snapshots and disks, so you can find the object to inspect on the storage array.
 
-Runs either as a kubectl plugin ("kubectl vmstorage ...") or directly
-("kubectl-vmstorage ...").
+Runs either as a kubectl plugin ("kubectl toolbox vmsnapshot ...") or directly
+("kubectl-toolbox ...").
 
 Snapshot chain:
   VirtualMachine -> VirtualMachineSnapshot -> VirtualMachineSnapshotContent
@@ -126,7 +126,7 @@ Every reference is verified, and broken ones are reported with the reason they
 usually break. Exits non-zero when a reference is missing or errored.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		Version:       Version,
+		Version:       version.Current().String(),
 	}
 
 	g.configFlags.AddFlags(root.PersistentFlags())
@@ -153,12 +153,9 @@ usually break. Exits non-zero when a reference is missing or errored.`,
 		"vendor CR kind holding array-side volume detail")
 
 	root.AddCommand(
-		newVMCommand(g),
-		newListCommand(g),
-		newSnapshotCommand(g),
-		newDisksCommand(g),
-		newPVCCommand(g),
-		newVolumeSnapshotCommand(g),
+		newVMSnapshotCommand(g),
+		newUpdateCommand(g),
+		newVersionCommand(g),
 	)
 	return root, g
 }
@@ -166,8 +163,25 @@ usually break. Exits non-zero when a reference is missing or errored.`,
 // Execute runs the CLI. Exit 2 signals the tool itself failed; exit 1 signals a
 // broken reference was found, which is a successful diagnosis.
 func Execute() {
+	// Tidy up after a previous Windows self-update before anything else.
+	selfupdate.CleanupWindowsLeftover()
+
 	root, g := NewRootCommand()
-	if err := root.Execute(); err != nil {
+
+	// Start the update check concurrently with the real work. It writes to stderr
+	// after the command finishes, so it can never interleave with the tree on
+	// stdout or corrupt piped output, and it is skipped entirely for local builds
+	// and when TOOLBOX_NO_UPDATE_CHECK is set.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	notice := selfupdate.New().NotifyInBackground(ctx)
+
+	err := root.ExecuteContext(ctx)
+
+	if msg := notice(); msg != "" {
+		fmt.Fprintln(os.Stderr, "\n"+msg)
+	}
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(2)
 	}

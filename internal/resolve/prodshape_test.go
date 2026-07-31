@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mjovanovic0/kubectl-vmstorage/internal/source"
-	"github.com/mjovanovic0/kubectl-vmstorage/internal/tree"
+	"github.com/mjovanovic0/kubectl-toolbox/internal/source"
+	"github.com/mjovanovic0/kubectl-toolbox/internal/tree"
 )
 
 // The prodshape fixture mirrors a real Portworx/FlashArray cluster and pins the

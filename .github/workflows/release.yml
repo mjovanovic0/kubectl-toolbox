@@ -37,7 +37,10 @@ jobs:
           VERSION: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          module=github.com/mjovanovic0/kubectl-vmstorage
+          module=github.com/mjovanovic0/kubectl-toolbox
+          vpkg="${module}/internal/version"
+          commit="$(git rev-parse --short HEAD)"
+          built="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           mkdir -p dist
           distdir="$(cd dist && pwd)"
 
@@ -49,20 +52,20 @@ jobs:
             windows/amd64 windows/arm64
           do
             goos="${target%/*}"; goarch="${target#*/}"
-            name="kubectl-vmstorage"
-            [ "$goos" = "windows" ] && name="kubectl-vmstorage.exe"
+            name="kubectl-toolbox"
+            [ "$goos" = "windows" ] && name="kubectl-toolbox.exe"
 
             workdir="$(mktemp -d)"
             echo "building $goos/$goarch"
             GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 go build \
               -trimpath \
-              -ldflags "-s -w -X ${module}/cmd.Version=${VERSION}" \
+              -ldflags "-s -w -X ${vpkg}.Version=${VERSION} -X ${vpkg}.Commit=${commit} -X ${vpkg}.BuildDate=${built}" \
               -o "$workdir/$name" .
 
             # Ship the licence and README alongside the binary.
             cp LICENSE NOTICE README.md "$workdir/"
 
-            base="kubectl-vmstorage_${VERSION}_${goos}_${goarch}"
+            base="kubectl-toolbox_${VERSION}_${goos}_${goarch}"
             if [ "$goos" = "windows" ]; then
               (cd "$workdir" && zip -q -r "${distdir}/${base}.zip" .)
             else
@@ -92,7 +95,7 @@ jobs:
         run: |
           set -euo pipefail
           {
-            echo "## kubectl-vmstorage ${VERSION}"
+            echo "## kubectl-toolbox ${VERSION}"
             echo
             echo "Resolve KubeVirt / OpenShift Virtualization snapshot and disk reference"
             echo "chains down to storage-array objects."
@@ -101,16 +104,16 @@ jobs:
             echo
             echo '```sh'
             echo "# macOS / Linux -- pick the archive for your platform, then:"
-            echo "tar -xzf kubectl-vmstorage_${VERSION}_linux_amd64.tar.gz"
-            echo "install -m 0755 kubectl-vmstorage ~/bin/"
-            echo "oc vmstorage vm <vm-name> -n <namespace>"
+            echo "tar -xzf kubectl-toolbox_${VERSION}_linux_amd64.tar.gz"
+            echo "install -m 0755 kubectl-toolbox ~/bin/"
+            echo "oc toolbox vmsnapshot vm <vm-name> -n <namespace>"
             echo '```'
             echo
             echo "Both \`oc\` and \`kubectl\` discover the plugin from the single"
-            echo "\`kubectl-vmstorage\` binary on PATH."
+            echo "\`kubectl-toolbox\` binary on PATH."
             echo
             echo "For a host you can only paste text into, use"
-            echo "\`kubectl-vmstorage-linux-amd64.sh\`: it is the binary gzipped and"
+            echo "\`kubectl-toolbox-linux-amd64.sh\`: it is the binary gzipped and"
             echo "base64-encoded, self-extracting and checksum-verified."
             echo
             echo "Verify downloads against \`checksums.txt\`."

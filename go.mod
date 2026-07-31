@@ -1,9 +1,10 @@
-module github.com/mjovanovic0/kubectl-vmstorage
+module github.com/mjovanovic0/kubectl-toolbox
 
 go 1.26.0
 
 require (
 	github.com/spf13/cobra v1.10.2
+	golang.org/x/mod v0.31.0
 	k8s.io/apimachinery v0.36.3
 	k8s.io/cli-runtime v0.36.3
 	k8s.io/client-go v0.36.3

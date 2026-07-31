@@ -1,6 +1,6 @@
 # Built binary and release artifacts
-/kubectl-vmstorage
-/kubectl-vmstorage.exe
+/kubectl-toolbox
+/kubectl-toolbox.exe
 /dist/
 
 # macOS

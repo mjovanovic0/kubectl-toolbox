@@ -7,7 +7,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
-	"github.com/mjovanovic0/kubectl-vmstorage/internal/tree"
+	"github.com/mjovanovic0/kubectl-toolbox/internal/tree"
 )
 
 // addVolumeAttachments reports where a PV is currently attached.
