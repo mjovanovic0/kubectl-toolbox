@@ -8,6 +8,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `toolbox nodecheck <pod>` (alias `label-check`), absorbed from the standalone
+  `kubectl-nodecheck` plugin: reports which of a pod's `nodeSelector` and required
+  `nodeAffinity` requirements no node satisfies. Ported onto the shared source
+  abstraction, so unlike the original it also works against a `--dump` and uses the
+  same kubeconfig flags as everything else instead of shelling out to `kubectl`.
+  A `nodeSelectorTerm` containing only `matchFields` is now reported as undecidable
+  rather than dropped; dropping it narrowed the OR and could report a schedulable
+  pod as stuck.
+
 - `toolbox update [--yes]` replaces the running binary with the newest GitHub
   release. The archive is verified against the release's `checksums.txt` before
   anything is installed, the replacement is atomic, and the new binary is executed

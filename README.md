@@ -5,7 +5,12 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
 A collection of OpenShift/Kubernetes debugging tools in one kubectl plugin. Each
-tool lives under its own subcommand; `vmsnapshot` is the first.
+tool lives under its own subcommand.
+
+| Tool | Answers |
+| --- | --- |
+| `toolbox vmsnapshot` | where a VM's disks and snapshots actually live, down to the storage array |
+| `toolbox nodecheck` | which of a pod's scheduling label requirements no node satisfies |
 
 **`toolbox vmsnapshot`** resolves the full reference chain behind a KubeVirt /
 OpenShift Virtualization VM's snapshots and disks, down to the objects you can
@@ -137,6 +142,30 @@ kubectl toolbox vmsnapshot pvc win-db-01-root -n virt-prod
 
 Standard `kubectl` flags (`-n`, `--context`, `--kubeconfig`) all apply to the
 `vmsnapshot` subcommands.
+
+## nodecheck
+
+```sh
+oc toolbox nodecheck <pod> -n <namespace>     # alias: label-check
+```
+
+Reports which of a pod's `nodeSelector` and required `nodeAffinity` requirements no
+node in the cluster satisfies — the ones that keep it `Pending`. The AND/OR
+structure is evaluated faithfully: `nodeSelector` entries must all match, required
+`nodeAffinity` needs at least one term to match, and within a term every expression
+must match.
+
+`preferredDuringScheduling…` is ignored because it never blocks scheduling.
+`matchFields` selects on node fields rather than labels, so a term containing it is
+reported as **undecidable** rather than being silently dropped — dropping it would
+narrow the OR and make a schedulable pod look stuck.
+
+Only labels are considered. Taints and tolerations, resource requests, topology
+spread and volume topology can equally block scheduling; the report says so, so a
+clean result is not mistaken for "scheduling is fine".
+
+Like every tool here it also reads from `--dump`, so you can ask why a pod was
+Pending from a must-gather after the fact.
 
 ## Staying up to date
 
