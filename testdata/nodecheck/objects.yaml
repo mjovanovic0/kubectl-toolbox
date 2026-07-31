@@ -1,0 +1,93 @@
+# A Pending pod whose nodeSelector names a zone label no node carries, plus a
+# nodeAffinity with two terms: one unsatisfiable, one satisfiable.
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: stuck-pod
+  namespace: demo
+spec:
+  nodeSelector:
+    disktype: ssd
+    zone: eu-west-1a
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: gpu
+                operator: Exists
+          - matchExpressions:
+              - key: kubernetes.io/arch
+                operator: In
+                values: ["amd64"]
+      # Soft affinity never blocks scheduling and is deliberately ignored.
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 10
+          preference:
+            matchExpressions:
+              - key: fast
+                operator: Exists
+status:
+  phase: Pending
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: free-pod
+  namespace: demo
+spec: {}
+status:
+  phase: Running
+---
+# Its only nodeAffinity term is a matchFields selector, which cannot be evaluated
+# from labels. The term must be kept, not dropped, or the pod would be reported as
+# unschedulable when it may well schedule.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fields-pod
+  namespace: demo
+spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchFields:
+              - key: metadata.name
+                operator: In
+                values: ["worker-1"]
+status:
+  phase: Pending
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: scheduled-pod
+  namespace: demo
+spec:
+  nodeName: worker-1
+  nodeSelector:
+    disktype: ssd
+status:
+  phase: Running
+---
+apiVersion: v1
+kind: Node
+metadata:
+  name: worker-1
+  labels:
+    kubernetes.io/arch: amd64
+    kubernetes.io/os: linux
+    disktype: ssd
+    cores: "8"
+---
+apiVersion: v1
+kind: Node
+metadata:
+  name: worker-2
+  labels:
+    kubernetes.io/arch: arm64
+    kubernetes.io/os: linux
+    disktype: hdd
+    cores: "4"

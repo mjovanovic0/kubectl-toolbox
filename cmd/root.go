@@ -154,6 +154,7 @@ usually break. Exits non-zero when a reference is missing or errored.`,
 
 	root.AddCommand(
 		newVMSnapshotCommand(g),
+		newNodeCheckCommand(g),
 		newUpdateCommand(g),
 		newVersionCommand(g),
 	)

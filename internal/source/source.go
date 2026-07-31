@@ -91,6 +91,7 @@ var preferredGroups = map[string]string{
 	// not what `kubectl get events` shows.
 	"Event": "",
 	"Pod":   "",
+	"Node":  "",
 }
 
 // PreferredGroup returns the pinned group for a kind and whether it was pinned.
