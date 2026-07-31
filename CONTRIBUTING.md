@@ -48,7 +48,7 @@ fix(array): stop claiming a chain was shown elsewhere when it was not
 ## Versioning
 
 [Semantic Versioning](https://semver.org/). While the major version is `0` the
-public surface is the CLI — command names, flags and exit codes — and it may still
+public surface is the CLI (command names, flags and exit codes) and it may still
 change between minor versions.
 
 Exit codes are part of that surface and are relied upon by scripts:
