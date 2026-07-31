@@ -1,12 +1,16 @@
-# kubectl-vmstorage
+# kubectl-toolbox
 
-[![CI](https://github.com/mjovanovic0/kubectl-vmstorage/actions/workflows/ci.yml/badge.svg)](https://github.com/mjovanovic0/kubectl-vmstorage/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/mjovanovic0/kubectl-vmstorage?sort=semver)](https://github.com/mjovanovic0/kubectl-vmstorage/releases/latest)
+[![CI](https://github.com/mjovanovic0/kubectl-toolbox/actions/workflows/ci.yml/badge.svg)](https://github.com/mjovanovic0/kubectl-toolbox/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/mjovanovic0/kubectl-toolbox?sort=semver)](https://github.com/mjovanovic0/kubectl-toolbox/releases/latest)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-Resolve the full reference chain behind a KubeVirt / OpenShift Virtualization VM's
-snapshots and disks, down to the objects you can actually look up on the storage
-array. Built for debugging missing PVCs and missing snapshots.
+A collection of OpenShift/Kubernetes debugging tools in one kubectl plugin. Each
+tool lives under its own subcommand; `vmsnapshot` is the first.
+
+**`toolbox vmsnapshot`** resolves the full reference chain behind a KubeVirt /
+OpenShift Virtualization VM's snapshots and disks, down to the objects you can
+actually look up on the storage array. Built for debugging missing PVCs and missing
+snapshots.
 
 Every hop is verified. A broken reference is reported with the reason that hop
 usually breaks, and the process exits non-zero.
@@ -14,36 +18,36 @@ usually breaks, and the process exits non-zero.
 ## Quick start
 
 Download the archive for your platform from the
-[latest release](https://github.com/mjovanovic0/kubectl-vmstorage/releases/latest):
+[latest release](https://github.com/mjovanovic0/kubectl-toolbox/releases/latest):
 
 ```sh
-tar -xzf kubectl-vmstorage_v0.0.1_linux_amd64.tar.gz    # or a darwin/windows asset
-install -m 0755 kubectl-vmstorage ~/bin/                # any directory on your PATH
-oc vmstorage vm <vm-name> -n <namespace>
+tar -xzf kubectl-toolbox_v0.0.1_linux_amd64.tar.gz    # or a darwin/windows asset
+install -m 0755 kubectl-toolbox ~/bin/                # any directory on your PATH
+oc toolbox vmsnapshot vm <vm-name> -n <namespace>
 ```
 
 Or build from source (needs Go 1.26 or newer, which the Kubernetes client
 libraries require):
 
 ```sh
-go install github.com/mjovanovic0/kubectl-vmstorage@latest
+go install github.com/mjovanovic0/kubectl-toolbox@latest
 # or, from a clone:
 make install PREFIX=~/bin
 ```
 
 Verify a download against `checksums.txt` from the same release.
 
-`oc vmstorage vm <vm-name>` is the main entry point: it walks the VM's disks down to
+`oc toolbox vmsnapshot vm <vm-name>` is the main entry point: it walks the VM's disks down to
 their PVCs/PVs and the array, then resolves every snapshot of that VM down to the
 array, and merges all findings into one problem list.
 
 The plugin is discovered by both `oc` and `kubectl` from the single
-`kubectl-vmstorage` binary — `oc` looks for `kubectl-*` as well as `oc-*`, so
-`oc vmstorage ...`, `kubectl vmstorage ...` and `kubectl-vmstorage ...` are equivalent.
+`kubectl-toolbox` binary — `oc` looks for `kubectl-*` as well as `oc-*`, so
+`oc toolbox vmsnapshot ...`, `kubectl toolbox vmsnapshot ...` and `kubectl-toolbox ...` are equivalent.
 
 ## The two chains
 
-Snapshot chain — `kubectl vmstorage snapshot <vm> <snapshot>`:
+Snapshot chain — `kubectl toolbox vmsnapshot snapshot <vm> <snapshot>`:
 
 | Object | Reference followed |
 | --- | --- |
@@ -54,7 +58,7 @@ Snapshot chain — `kubectl vmstorage snapshot <vm> <snapshot>`:
 | `VolumeSnapshotContent` | `status.snapshotHandle` |
 | `PureSnapshot` | matched on the CSI handle |
 
-Disk chain — `kubectl vmstorage disks <vm>`:
+Disk chain — `kubectl toolbox vmsnapshot disks <vm>`:
 
 | Object | Reference followed |
 | --- | --- |
@@ -73,7 +77,7 @@ and a restored `PersistentVolumeClaim` records its origin snapshot in
 
 ```sh
 make install PREFIX=~/bin      # anywhere on PATH
-oc plugin list                 # should show kubectl-vmstorage
+oc plugin list                 # should show kubectl-toolbox
 ```
 
 Cross-compile release binaries with `make cross`.
@@ -85,7 +89,7 @@ binary, gzipped and base64-encoded, with its sha256 embedded — for hosts reach
 only by copying text into a terminal.
 
 ```sh
-make text                     # -> dist/kubectl-vmstorage-linux-amd64.sh  (~16 MiB of text)
+make text                     # -> dist/kubectl-toolbox-linux-amd64.sh  (~16 MiB of text)
 make text TEXT_ARCH=arm64
 make text COMP=xz             # ~33% less text, needs unxz on the host
 make text CHUNK=4             # also split the payload into 4 MiB .b64 parts
@@ -95,9 +99,9 @@ make text-all                 # linux amd64 + arm64
 Then on the host:
 
 ```sh
-sh kubectl-vmstorage-linux-amd64.sh          # writes ./kubectl-vmstorage, verifies sha256
-install -m 0755 kubectl-vmstorage ~/bin/
-oc vmstorage vm <name> -n <namespace>
+sh kubectl-toolbox-linux-amd64.sh          # writes ./kubectl-toolbox, verifies sha256
+install -m 0755 kubectl-toolbox ~/bin/
+oc toolbox vmsnapshot vm <name> -n <namespace>
 ```
 
 The script decodes to a staging path and only moves the binary into place after
@@ -105,33 +109,62 @@ the checksum matches, so a truncated or mangled paste fails loudly and leaves
 nothing runnable behind. `make text` verifies its own round-trip before reporting
 success. If the paste is too large for one go, `CHUNK=<MiB>` also emits numbered
 parts to reassemble with
-`cat *.part-* | base64 -d | gunzip > kubectl-vmstorage`.
+`cat *.part-* | base64 -d | gunzip > kubectl-toolbox`.
 
 ## Usage
 
 ```sh
 # everything about one VM: disks and all its snapshots
-oc vmstorage vm win-db-01 -n virt-prod
+oc toolbox vmsnapshot vm win-db-01 -n virt-prod
 
 # a VM with a long snapshot history: only the newest few
-oc vmstorage vm win-db-01 -n virt-prod --latest 3
-oc vmstorage vm win-db-01 -n virt-prod --no-snapshots   # disks only
-oc vmstorage vm win-db-01 -n virt-prod --no-disks       # snapshots only
+oc toolbox vmsnapshot vm win-db-01 -n virt-prod --latest 3
+oc toolbox vmsnapshot vm win-db-01 -n virt-prod --no-snapshots   # disks only
+oc toolbox vmsnapshot vm win-db-01 -n virt-prod --no-disks       # snapshots only
 
 # what snapshots exist, and which ones are already suspect
-kubectl vmstorage list -n virt-prod
-kubectl vmstorage list win-db-01 -n virt-prod
+kubectl toolbox vmsnapshot list -n virt-prod
+kubectl toolbox vmsnapshot list win-db-01 -n virt-prod
 
 # narrow to one snapshot, or to the disks only
-kubectl vmstorage snapshot win-db-01 snap-2026-07-20 -n virt-prod
-kubectl vmstorage disks win-db-01 -n virt-prod
+kubectl toolbox vmsnapshot snapshot win-db-01 snap-2026-07-20 -n virt-prod
+kubectl toolbox vmsnapshot disks win-db-01 -n virt-prod
 
 # start from a name you found in CSI or storage-operator logs
-kubectl vmstorage volumesnapshot vmsnapshot-8f3a-vol-rootdisk -n virt-prod
-kubectl vmstorage pvc win-db-01-root -n virt-prod
+kubectl toolbox vmsnapshot volumesnapshot vmsnapshot-8f3a-vol-rootdisk -n virt-prod
+kubectl toolbox vmsnapshot pvc win-db-01-root -n virt-prod
 ```
 
-Standard `kubectl` flags (`-n`, `--context`, `--kubeconfig`) all apply.
+Standard `kubectl` flags (`-n`, `--context`, `--kubeconfig`) all apply to the
+`vmsnapshot` subcommands.
+
+## Staying up to date
+
+```sh
+oc toolbox version            # build stamp, install path, and whether it is writable
+oc toolbox version --check    # ask GitHub right now, ignoring the cache
+oc toolbox update             # download the newest release and replace this binary
+oc toolbox update --yes       # ... without the confirmation prompt
+```
+
+`update` verifies the download against the `checksums.txt` published with the
+release before installing anything, then replaces the binary atomically: the new
+one is staged alongside the old and moved into place, and it is executed once to
+prove it runs. A failed or interrupted update leaves the working binary untouched.
+If the target directory is not writable it says so rather than half-failing.
+
+Every command also starts a background check and prints a one-line notice on
+**stderr** after the output if a newer release exists — stderr so it can never
+interleave with the tree or corrupt a pipe. The check is cached for 12 hours, gives
+up after 3 seconds, and is skipped entirely for local builds. To turn it off:
+
+```sh
+export TOOLBOX_NO_UPDATE_CHECK=1
+```
+
+On a host with no route to GitHub — which is where this tool is often used — the
+check fails silently and `update` explains that you need the offline install path
+below.
 
 Chains are always resolved in full, including where the same VolumeSnapshot is
 reached from more than one branch — a branch you are following should never dead-end
@@ -149,7 +182,7 @@ access:
 
 ```sh
 oc adm must-gather --image=registry.redhat.io/container-native-virtualization/cnv-must-gather-rhel9
-kubectl vmstorage snapshot win-db-01 snap-2026-07-20 --dump ./must-gather.local.123 -n virt-prod
+kubectl toolbox vmsnapshot snapshot win-db-01 snap-2026-07-20 --dump ./must-gather.local.123 -n virt-prod
 ```
 
 A hand-rolled capture works too — `kind: List` wrappers and multi-document files
@@ -159,7 +192,7 @@ are both unwrapped:
 mkdir dump && cd dump
 for k in vm vmsnapshot vmsnapshotcontent volumesnapshot dv pvc; do oc get $k -o yaml > $k.yaml; done
 oc get volumesnapshotcontent,pv,puresnapshot,purevolume -o yaml > cluster.yaml
-kubectl vmstorage snapshot win-db-01 snap-2026-07-20 --dump ./dump -n virt-prod
+kubectl toolbox vmsnapshot snapshot win-db-01 snap-2026-07-20 --dump ./dump -n virt-prod
 ```
 
 ## Exit codes
@@ -180,9 +213,9 @@ resolved from the Kind through API discovery rather than hardcoded — which als
 means other vendors' CRs work by passing a different kind:
 
 ```sh
-kubectl vmstorage snapshot vm snap --array-snapshot-kind MyVendorSnapshot
-kubectl vmstorage disks vm --array-volume-kind MyVendorVolume
-kubectl vmstorage snapshot vm snap --no-array   # stop at the CSI handle
+kubectl toolbox vmsnapshot snapshot vm snap --array-snapshot-kind MyVendorSnapshot
+kubectl toolbox vmsnapshot disks vm --array-volume-kind MyVendorVolume
+kubectl toolbox vmsnapshot snapshot vm snap --no-array   # stop at the CSI handle
 ```
 
 Because the handle-to-CR mapping is not specified by CSI, the object is located
@@ -288,6 +321,6 @@ tag. Notable changes are recorded in [CHANGELOG.md](CHANGELOG.md).
 
 [Apache-2.0](LICENSE). Copyright 2026 Milan Jovanović.
 
-`kubectl-vmstorage` is an independent tool. It is not affiliated with or endorsed by
+`kubectl-toolbox` is an independent tool. It is not affiliated with or endorsed by
 Red Hat, the KubeVirt project, Pure Storage or Portworx; those names are used only
 to describe the APIs and resources it reads.

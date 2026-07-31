@@ -6,11 +6,33 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `toolbox update [--yes]` replaces the running binary with the newest GitHub
+  release. The archive is verified against the release's `checksums.txt` before
+  anything is installed, the replacement is atomic, and the new binary is executed
+  once to prove it runs before it takes over.
+- `toolbox version [--check]` prints the version, commit, build date, platform and
+  install path, and can query GitHub for a newer release.
+- A background update check on every command, printing a one-line notice on stderr
+  after the output. Cached for 12 hours, 3-second timeout, skipped for local builds,
+  and disabled by `TOOLBOX_NO_UPDATE_CHECK=1`.
+
 ### Changed
 
-- **BREAKING:** renamed from `vmsnap` to `vmstorage`. The command is now
-  `oc vmstorage vm <name>`, the binary is `kubectl-vmstorage`, and the module path
-  is `github.com/mjovanovic0/kubectl-vmstorage`. The old name described only the
+- **BREAKING:** the plugin is now `toolbox`, a container for several tools, and the
+  storage resolver moved under `vmsnapshot`. What was `oc vmstorage vm <name>` is
+  now `oc toolbox vmsnapshot vm <name>`; `vmsnap` and `vmstorage` remain as aliases
+  for the subcommand. The binary is `kubectl-toolbox` and the module path is
+  `github.com/mjovanovic0/kubectl-toolbox`.
+- Builds now stamp the commit and build date alongside the version, so `version`
+  can report them and semver comparison can drive update checks.
+
+### Changed
+
+- **BREAKING:** renamed from `vmsnap` to `toolbox`. The command is now
+  `oc toolbox vmsnapshot vm <name>`, the binary is `kubectl-toolbox`, and the module path
+  is `github.com/mjovanovic0/kubectl-toolbox`. The old name described only the
   snapshot half of the tool, while most of it resolves the disk chain, and it read
   as though the tool took snapshots rather than inspected them. Anyone who
   installed `v0.0.1` should remove `kubectl-vmsnap` from their PATH; subcommands,
@@ -87,5 +109,5 @@ missing snapshots.
 - `make text` packages the binary as a self-extracting, checksum-verified shell
   script for hosts reachable only by pasting text into a terminal.
 
-[Unreleased]: https://github.com/mjovanovic0/kubectl-vmstorage/compare/v0.0.1...HEAD
-[0.0.1]: https://github.com/mjovanovic0/kubectl-vmstorage/releases/tag/v0.0.1
+[Unreleased]: https://github.com/mjovanovic0/kubectl-toolbox/compare/v0.0.1...HEAD
+[0.0.1]: https://github.com/mjovanovic0/kubectl-toolbox/releases/tag/v0.0.1

@@ -32,7 +32,10 @@ A breaking change is marked with `!` after the type (`feat!:`) or a
 `BREAKING CHANGE:` footer, and forces a MAJOR bump.
 
 Useful scopes: `snapshot`, `disks`, `array`, `events`, `runtime`, `source`, `tree`,
-`cli`.
+`cli`, `update`, `version`.
+
+A new tool in the toolbox is a `feat` with its own scope, added as a subcommand of
+the root so the top-level help stays a list of nouns rather than loose verbs.
 
 Examples from this project's history:
 
